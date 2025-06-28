@@ -253,10 +253,10 @@ defmodule Vsr.Replica do
   end
 
   # Sending messages to connected replicas
-  defp send_to_replica(state, replica_id, message) do
+  defp send_to_replica(state, _replica_id, message) do
     # Find the replica in connected replicas by matching replica_id
     connected_replica =
-      Enum.find(state.connected_replicas, fn {pid, _ref} ->
+      Enum.find(state.connected_replicas, fn {_pid, _ref} ->
         # We'd need to track replica_id -> pid mapping for this to work properly
         # For now, send to all connected replicas
         true
@@ -330,7 +330,7 @@ defmodule Vsr.Replica do
     new_state = %{state | connected_replicas: new_connected_replicas}
 
     if connected_count < majority(state.total_quorum_number) do
-      Logger.warn(
+      Logger.warning(
         "Lost quorum: #{connected_count}/#{state.total_quorum_number} replicas connected"
       )
 
@@ -354,7 +354,7 @@ defmodule Vsr.Replica do
               send(sender_pid, {:prepare_ok, view_number, op_number, state.replica_id})
 
             :error ->
-              Logger.warn("Could not find sender replica #{sender_id}")
+              Logger.warning("Could not find sender replica #{sender_id}")
           end
 
           {:noreply, new_state}
@@ -366,7 +366,7 @@ defmodule Vsr.Replica do
               send(sender_pid, {:prepare_ok, view_number, op_number, state.replica_id})
 
             :error ->
-              Logger.warn("Could not find sender replica #{sender_id}")
+              Logger.warning("Could not find sender replica #{sender_id}")
           end
 
           {:noreply, state}
@@ -447,7 +447,7 @@ defmodule Vsr.Replica do
           send(sender_pid, {:start_view_change_ack, new_view_number, state.replica_id})
 
         :error ->
-          Logger.warn("Could not find sender replica #{sender_id}")
+          Logger.warning("Could not find sender replica #{sender_id}")
       end
 
       # +1 for self
@@ -512,7 +512,7 @@ defmodule Vsr.Replica do
           send(primary_pid, {:view_change_ok, new_view_number, state.replica_id})
 
         :error ->
-          Logger.warn("Could not find primary replica #{new_state.primary}")
+          Logger.warning("Could not find primary replica #{new_state.primary}")
       end
 
       {:noreply, new_state}
@@ -630,7 +630,7 @@ defmodule Vsr.Replica do
   end
 
   # Helper to find replica pid by replica_id in connected replicas
-  defp find_replica_pid(state, replica_id) do
+  defp find_replica_pid(state, _replica_id) do
     # For now, we need a better mapping from replica_id to pid
     # This is a limitation of the current approach
     # In a real implementation, we'd maintain a replica_id -> pid mapping
