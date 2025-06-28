@@ -266,6 +266,10 @@ defmodule Vsr.Replica do
     put_impl({key, value}, from, state)
   end
 
+  def handle_call({:update_configuration, new_configuration}, _from, state) do\
+    new_state = %{state | configuration: new_configuration, total_quorum_number: length(new_configuration), primary: primary_for_view(state.view_number, new_configuration)}\
+    {:reply, :ok, new_state}\
+  end
   def handle_call({:delete, key}, from, state) do
     delete_impl({key}, from, state)
   end
