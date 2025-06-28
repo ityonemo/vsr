@@ -1,0 +1,9 @@
+{application,vsr,
+             [{modules,['Elixir.Vsr','Elixir.Vsr.Application',
+                        'Elixir.Vsr.Replica']},
+              {optional_applications,[]},
+              {applications,[kernel,stdlib,elixir,logger]},
+              {description,"vsr"},
+              {registered,[]},
+              {vsn,"0.1.0"},
+              {mod,{'Elixir.Vsr.Application',[]}}]}.
