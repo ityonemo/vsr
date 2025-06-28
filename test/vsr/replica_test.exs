@@ -193,7 +193,7 @@ defmodule Vsr.ReplicaTest do
   end
 
   describe "key-value operations" do
-
+    setup do
       {:ok, replica} = Replica.start_link(replica_id: 4, configuration: [4], name: nil)
       %{replica: replica}
     end
