@@ -56,11 +56,12 @@ defmodule Vsr.ReplicaTest do
       GenServer.call(backup1, {:update_configuration, configuration})
       GenServer.call(backup2, {:update_configuration, configuration})
 
-      Replica.connect(replica2, replica3)
-      Replica.connect(replica3, replica1)
-      Replica.connect(replica3, replica2)
+      # Connect replicas to each other
+      Replica.connect(primary, backup1)
+      Replica.connect(primary, backup2)
+      Replica.connect(backup1, backup2)
 
-      %{replica1: replica1, replica2: replica2, replica3: replica3}
+      %{replica1: primary, replica2: backup1, replica3: backup2}
     end
 
     test "backup starts view change on timeout", %{replica2: replica2} do
@@ -154,15 +155,12 @@ defmodule Vsr.ReplicaTest do
   end
 
   describe "state transfer" do
-    setup do
+    test "lagging replica requests and receives state" do
+      # Create two independent replicas (no connections)
       {:ok, replica1} = Replica.start_link(configuration: [], name: nil)
       {:ok, replica2} = Replica.start_link(configuration: [], name: nil)
 
-      %{replica1: replica1, replica2: replica2}
-    end
-
-    test "lagging replica requests and receives state", %{replica1: replica1, replica2: replica2} do
-      # Add some operations to replica1
+      # Add some operations to replica1 (as a single replica)
       Replica.put(replica1, "key1", "value1")
       Replica.put(replica1, "key2", "value2")
 
@@ -175,7 +173,7 @@ defmodule Vsr.ReplicaTest do
 
       send(replica1, get_state_msg)
 
-      Process.sleep(200)
+      Process.sleep(500)
 
       # Check that replica2 caught up
       replica2_state = Replica.dump(replica2)
