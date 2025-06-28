@@ -1,41 +1,5 @@
-defmodule Vsr.Log do
+defprotocol Vsr.Log do
   @moduledoc """
-  Protocol for abstract log storage in VSR.
-
-  This protocol allows different storage backends to be used
-  for the VSR operation log, enabling flexibility in deployment
-  scenarios (in-memory, persistent, distributed, etc.).
-  """
-
-  @type t :: term()
-  @type view :: non_neg_integer()
-  @type op_number :: non_neg_integer()
-  @type operation :: term()
-  @type sender_id :: pid()
-  @type log_entry :: {view(), op_number(), operation(), sender_id()}
-
-  @doc """
-  Create a new log instance.
-  """
-  @callback new(keyword()) :: t()
-
-  @doc """
-  Append an entry to the log.
-
-  Returns the updated log.
-  """
-  @callback append(t(), view(), op_number(), operation(), sender_id()) :: t()
-
-  @doc """
-  Get an entry at the specified operation number.
-
-  Returns `{:ok, entry}` if found, `{:error, :not_found}` otherwise.
-  """
-  @callback get(t(), op_number()) :: {:ok, log_entry()} | {:error, :not_found}
-
-  @doc """
-  Get alldefprotocol Vsr.Log do
-  @moduledoc \"""
   Protocol for abstract log storage in VSR.
 
   This protocol allows different storage backends to be used
