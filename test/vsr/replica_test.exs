@@ -4,41 +4,52 @@ defmodule Vsr.ReplicaTest do
 
   describe "replica initialization" do
     test "starts with correct initial state" do
-      {:ok, pid} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
+      {:ok, pid} = Replica.start_link(replica_id: 101, configuration: [101, 102, 103], name: nil)
 
       state = Replica.dump(pid)
 
-      assert state.replica_id == 1
+      assert state.replica_id == 101
       assert state.view_number == 0
       assert state.status == :normal
       assert state.op_number == 0
       assert state.commit_number == 0
-      assert state.configuration == [1, 2, 3]
+      assert state.configuration == [101, 102, 103]
       assert length(state.log) == 0
     end
 
     test "starts in blocking mode when configured" do
-      {:ok, pid} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3], blocking: true)
+      {:ok, pid} =
+        Replica.start_link(
+          replica_id: 111,
+          configuration: [111, 112, 113],
+          blocking: true,
+          name: nil
+        )
 
       state = Replica.dump(pid)
       assert state.blocking == true
     end
 
     test "determines primary correctly in initial view" do
-      {:ok, pid} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
+      {:ok, pid} = Replica.start_link(replica_id: 121, configuration: [121, 122, 123], name: nil)
 
       state = Replica.dump(pid)
       # view 0, first replica
-      expected_primary = rem(0, 3) + 1
+      expected_primary = rem(0, 3) + 121
       assert state.primary == expected_primary
     end
   end
 
   describe "normal operation - primary" do
     setup do
-      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
-      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+      {:ok, primary} =
+        Replica.start_link(replica_id: 201, configuration: [201, 202, 203], name: nil)
+
+      {:ok, backup1} =
+        Replica.start_link(replica_id: 202, configuration: [201, 202, 203], name: nil)
+
+      {:ok, backup2} =
+        Replica.start_link(replica_id: 203, configuration: [201, 202, 203], name: nil)
 
       # Connect replicas to each other
       Replica.connect(primary, backup1)
@@ -95,27 +106,17 @@ defmodule Vsr.ReplicaTest do
 
   describe "normal operation - backup" do
     setup do
-      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
-      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+      {:ok, backup} =
+        Replica.start_link(replica_id: 302, configuration: [301, 302, 303], name: nil)
 
-      # Connect replicas to each other
-      Replica.connect(primary, backup1)
-      Replica.connect(primary, backup2)
-      Replica.connect(backup1, primary)
-      Replica.connect(backup1, backup2)
-      Replica.connect(backup2, primary)
-      Replica.connect(backup2, backup1)
-      {:ok, backup} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-
-      %{primary: primary, backup: backup}
+      %{backup: backup}
     end
 
     test "accepts prepare message and responds with prepare-ok", %{backup: backup} do
       operation = {:put, "key1", "value1"}
 
       # Send prepare message to backup
-      send(backup, {:prepare, 0, 1, operation, 0, 1})
+      send(backup, {:prepare, 0, 1, operation, 0, 301})
 
       Process.sleep(10)
 
@@ -128,7 +129,7 @@ defmodule Vsr.ReplicaTest do
       operation = {:put, "key1", "value1"}
 
       # Send prepare then commit
-      send(backup, {:prepare, 0, 1, operation, 0, 1})
+      send(backup, {:prepare, 0, 1, operation, 0, 301})
       send(backup, {:commit, 0, 1})
 
       Process.sleep(10)
@@ -141,20 +142,22 @@ defmodule Vsr.ReplicaTest do
 
   describe "view change" do
     setup do
-      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
-      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+      {:ok, replica1} =
+        Replica.start_link(replica_id: 401, configuration: [401, 402, 403], name: nil)
+
+      {:ok, replica2} =
+        Replica.start_link(replica_id: 402, configuration: [401, 402, 403], name: nil)
+
+      {:ok, replica3} =
+        Replica.start_link(replica_id: 403, configuration: [401, 402, 403], name: nil)
 
       # Connect replicas to each other
-      Replica.connect(primary, backup1)
-      Replica.connect(primary, backup2)
-      Replica.connect(backup1, primary)
-      Replica.connect(backup1, backup2)
-      Replica.connect(backup2, primary)
-      Replica.connect(backup2, backup1)
-      {:ok, replica1} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
-      {:ok, replica2} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-      {:ok, replica3} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+      Replica.connect(replica1, replica2)
+      Replica.connect(replica1, replica3)
+      Replica.connect(replica2, replica1)
+      Replica.connect(replica2, replica3)
+      Replica.connect(replica3, replica1)
+      Replica.connect(replica3, replica2)
 
       %{replica1: replica1, replica2: replica2, replica3: replica3}
     end
@@ -177,16 +180,16 @@ defmodule Vsr.ReplicaTest do
       Replica.start_view_change(replica2)
 
       # Send start-view-change messages
-      send(replica1, {:start_view_change, 1, 2})
-      send(replica3, {:start_view_change, 1, 2})
+      send(replica1, {:start_view_change, 1, 402})
+      send(replica3, {:start_view_change, 1, 402})
 
       # Allow view change to complete
       Process.sleep(50)
 
       # Check that view change completed and new primary is determined
       replica2_state = Replica.dump(replica2)
-      # view 1
-      expected_new_primary = rem(1, 3) + 1
+      # view 1, configuration [401, 402, 403]
+      expected_new_primary = Enum.at([401, 402, 403], rem(1, 3))
       assert replica2_state.view_number == 1
       assert replica2_state.primary == expected_new_primary
     end
@@ -194,7 +197,7 @@ defmodule Vsr.ReplicaTest do
 
   describe "key-value operations" do
     setup do
-      {:ok, replica} = Replica.start_link(replica_id: 4, configuration: [4], name: nil)
+      {:ok, replica} = Replica.start_link(replica_id: 501, configuration: [501], name: nil)
       %{replica: replica}
     end
 
@@ -224,7 +227,7 @@ defmodule Vsr.ReplicaTest do
   describe "blocking behavior" do
     test "replica blocks when configured with blocking option" do
       {:ok, replica} =
-        Replica.start_link(replica_id: 1, configuration: [1], blocking: true, name: nil)
+        Replica.start_link(replica_id: 601, configuration: [601], blocking: true, name: nil)
 
       # Start async operation that should block
       task =
@@ -245,19 +248,12 @@ defmodule Vsr.ReplicaTest do
 
   describe "state transfer" do
     setup do
-      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
-      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+      {:ok, replica1} = Replica.start_link(replica_id: 701, configuration: [701, 702], name: nil)
+      {:ok, replica2} = Replica.start_link(replica_id: 702, configuration: [701, 702], name: nil)
 
       # Connect replicas to each other
-      Replica.connect(primary, backup1)
-      Replica.connect(primary, backup2)
-      Replica.connect(backup1, primary)
-      Replica.connect(backup1, backup2)
-      Replica.connect(backup2, primary)
-      Replica.connect(backup2, backup1)
-      {:ok, replica1} = Replica.start_link(replica_id: 1, configuration: [1, 2])
-      {:ok, replica2} = Replica.start_link(replica_id: 2, configuration: [1, 2])
+      Replica.connect(replica1, replica2)
+      Replica.connect(replica2, replica1)
 
       %{replica1: replica1, replica2: replica2}
     end
