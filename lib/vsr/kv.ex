@@ -69,7 +69,7 @@ defmodule Vsr.KV do
 end
 
 defimpl Vsr.StateMachine, for: Vsr.KV do
-  def new(state_machine_impl, opts), do: Vsr.KV.new(opts)
+  def new(opts), do: Vsr.KV.new(opts)
 
   def apply_operation(kv, operation), do: Vsr.KV.apply_operation(kv, operation)
 
