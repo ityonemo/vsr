@@ -583,6 +583,10 @@ defmodule Vsr.Replica do
   end
 
   # Helper to find primary for a view
+  defp primary_for_view(_view_number, []) do
+    nil
+  end
+
   defp primary_for_view(view_number, configuration) do
     index = rem(view_number, length(configuration))
     Enum.at(configuration, index)
