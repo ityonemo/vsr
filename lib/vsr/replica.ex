@@ -518,6 +518,10 @@ defmodule Vsr.Replica do
   end
 
   def handle_info({:get_state, _view_number, _op_number, requester}, state) do
+    IO.puts(
+      "Sending state to #{inspect(requester)}: view=#{state.view_number}, op=#{state.op_number}, log_length=#{length(state.log)}"
+    )
+
     # Always send state regardless of view number
     send(
       requester,
@@ -528,6 +532,10 @@ defmodule Vsr.Replica do
   end
 
   def handle_info({:new_state, new_view_number, log, op_number, commit_number}, state) do
+    IO.puts(
+      "Received new state: view=#{new_view_number}, op=#{op_number}, log_length=#{length(log)}, commit=#{commit_number}"
+    )
+
     if new_view_number >= state.view_number or op_number > state.op_number do
       # Apply all committed operations from new state to our ETS store
       Enum.each(log, fn {_v, op, operation, _sender_pid} ->
