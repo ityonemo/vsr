@@ -194,6 +194,9 @@ defmodule Vsr.Replica do
     # Apply operation immediately for single replica
     if MapSet.size(state.connected_replicas) == 0 do
       :ets.insert(state.store, {key, value})
+      # Also apply the operation through the VSR protocol
+      apply_operation(state, operation)
+      # Apply the operation to maintain consistency
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
       {:reply, :ok, new_state}
     else
@@ -230,6 +233,9 @@ defmodule Vsr.Replica do
     # Apply operation immediately for single replica
     if MapSet.size(state.connected_replicas) == 0 do
       :ets.delete(state.store, key)
+      # Also apply the operation through the VSR protocol
+      apply_operation(state, operation)
+      # Apply the operation to maintain consistency
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
       {:reply, :ok, new_state}
     else
