@@ -274,6 +274,8 @@ defmodule Vsr.Replica do
 
   def handle_cast({:get_state, target_replica}, state) do
     send(target_replica, {:get_state, state.view_number, state.op_number, self()})
+    # Also request immediate state response
+    send(self(), {:request_state_from, target_replica})
     {:noreply, state}
   end
 
@@ -455,12 +457,12 @@ defmodule Vsr.Replica do
   end
 
   def handle_info({:get_state, view_number, _op_number, requester}, state) do
-    if view_number == state.view_number do
-      send(requester, {:new_state, view_number, state.log, state.op_number, state.commit_number})
-    end
+    # Always s state regardless of view number
+      s(requester, {:new_state, state.view_number, state.log, state.op_number, state.commit_number})
+    
 
     {:noreply, state}
-  end
+  
 
   def handle_info({:new_state, new_view_number, log, op_number, commit_number}, state) do
     if new_view_number >= state.view_number do
