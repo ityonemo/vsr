@@ -205,7 +205,7 @@ defmodule Vsr.ReplicaTest do
       Replica.connect(backup1, backup2)
       Replica.connect(backup2, primary)
       Replica.connect(backup2, backup1)
-      {:ok, replica} = Replica.start_link(replica_id: 1, configuration: [1])
+      {:ok, replica} = Replica.start_link(replica_id: 1, configuration: [1], name: nil)
       %{replica: replica}
     end
 
@@ -234,7 +234,8 @@ defmodule Vsr.ReplicaTest do
 
   describe "blocking behavior" do
     test "replica blocks when configured with blocking option" do
-      {:ok, replica} = Replica.start_link(replica_id: 1, configuration: [1], blocking: true)
+      {:ok, replica} =
+        Replica.start_link(replica_id: 1, configuration: [1], blocking: true, name: nil)
 
       # Start async operation that should block
       task =
