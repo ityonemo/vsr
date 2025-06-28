@@ -262,14 +262,14 @@ defmodule Vsr.Replica do
     end
 
     new_state = %{
-      new_state
+      state
       | view_number: new_view_number,
         status: :view_change,
         primary: primary_for_view(new_view_number, state.configuration),
         view_change_votes: Map.put(state.view_change_votes, state.replica_id, true)
     }
 
-    {:noreply, state}
+    {:noreply, new_state}
   end
 
   def handle_cast({:get_state, target_replica}, state) do
@@ -457,12 +457,14 @@ defmodule Vsr.Replica do
   end
 
   def handle_info({:get_state, view_number, _op_number, requester}, state) do
-    # Always s state regardless of view number
-      s(requester, {:new_state, state.view_number, state.log, state.op_number, state.commit_number})
-    
+    # Always send state regardless of view number
+    send(
+      requester,
+      {:new_state, state.view_number, state.log, state.op_number, state.commit_number}
+    )
 
     {:noreply, state}
-  
+  end
 
   def handle_info({:new_state, new_view_number, log, op_number, commit_number}, state) do
     if new_view_number >= state.view_number do
