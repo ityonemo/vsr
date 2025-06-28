@@ -173,7 +173,7 @@ defmodule Vsr.Replica do
       end
     else
       # Reply to client that operation succeeded immediately
-      send_client_reply(self(), :ok)
+      # Reply sent via GenServer call mechanism
       {:noreply, state}
     end
   end
@@ -181,7 +181,7 @@ defmodule Vsr.Replica do
   # Handling GenServer callbacks
 
   def handle_call({:dump}, _from, state) do
-    dump_impl(:dump, _from, state)
+    dump_impl(:dump, from, state)
   end
 
   def handle_call({:get, key}, from, state) do
@@ -216,12 +216,15 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
-  def handle_info({:prepare, view_number, op_number, operation, commit_number, sender_id}, state) do
+  def handle_info(
+        {:prepare, view_number, op_number, operation, _commit_number, _sender_id},
+        state
+      ) do
     if view_number >= state.view_number do
       # Append to log if new operation
       cond do
         op_number > length(state.log) ->
-          new_log = state.log ++ [{view_number, op_number, operation, sender_id}]
+          new_log = state.log ++ [{view_number, op_number, operation, _sender_id}]
           new_state = %{state | log: new_log, op_number: op_number}
           send(sender_id, {:prepare_ok, view_number, op_number, state.replica_id})
 
@@ -238,13 +241,13 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:prepare_ok, view_number, op_number, replica_id}, state) do
+  def handle_info({:prepare_ok, view_number, op_number, _replica_id}, state) do
     if view_number == state.view_number and
          Map.get(state.prepare_ok_count, op_number, 0) + 1 > div(length(state.configuration), 2) do
       # Majority received, commit operation
       new_commit_number = max(state.commit_number, op_number)
 
-      Enum.each(state.log, fn {v, op, _op_data, _cid, _reqid} ->
+      Enum.each(state.log, fn {_v, op, _op_data, _cid, _reqid} ->
         if op <= new_commit_number and op > state.commit_number do
           commit_operation(state, op)
         end
@@ -302,7 +305,7 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:start_view_change, new_view_number, sender_id}, state) do
+  def handle_info({:start_view_change, new_view_number, _sender_id}, state) do
     if new_view_number > state.view_number do
       new_view_change_votes = Map.put(state.view_change_votes, sender_id, true)
 
@@ -324,7 +327,7 @@ defmodule Vsr.Replica do
 
   def handle_info(
         {:do_view_change, new_view_number, log, last_normal_view, op_number, commit_number,
-         sender_id},
+         _sender_id},
         state
       ) do
     if new_view_number >= state.view_number do
@@ -394,7 +397,7 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:get_state, view_number, op_number, requester}, state) do
+  def handle_info({:get_state, view_number, _op_number, requester}, state) do
     if view_number == state.view_number do
       send(requester, {:new_state, view_number, state.log, state.op_number, state.commit_number})
     end
