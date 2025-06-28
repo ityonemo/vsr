@@ -13,57 +13,193 @@ Viewstamped Replication is a consensus algorithm for building fault-tolerant dis
 
 ### View
 A **view** is a configuration period with a designated primary. Views are numbered sequentially starting from 0.
+The primary for view `v` is determined by: `primary = configuration[v % length(configuration)]`
 
 ### Operation Log
 Each replica maintains an ordered log of operations. Operations are identified by:
 - **View number**: The view in which the operation was proposed
 - **Operation number**: Sequential number within the view
+- **Operation**: The actual operation to execute
+- **Sender ID**: The replica that proposed the operation
+
+### Replica State
+Each replica maintains:
+```elixir
+%Vsr.Replica{
+  replica_id: integer(),           # Unique identifier for this replica
+  view_number: integer(),          # Current view number
+  status: :normal | :view_change | :recovering,  # Current operational status
+  op_number: integer(),            # Highest operation number seen
+  commit_number: integer(),        # Highest committed operation number
+  log: [log_entry()],             # Ordered list of operations
+  configuration: [integer()],      # List of all replica IDs
+  primary: integer(),             # Current primary replica ID
+  store: term(),                  # State machine storage
+  client_table: term(),           # Client request deduplication
+  prepare_ok_count: %{integer() => integer()},  # Count of prepare-ok per operation
+  view_change_votes: %{integer() => boolean()}, # Votes for view change
+  last_normal_view: integer()     # Last view in normal operation
+}
+```
 
 ## Algorithm Phases
 
-### 1. Normal Operation
-When the system is stable with an active primary:
+### 1. Normal Operation Phase
 
-1. **Client Request**: Client sends operation to primary
-2. **Prepare**: Primary assigns op-number, sends `PREPARE(view, op-num, operation, commit-num)` to all backups
-3. **Prepare OK**: Backups append operation to log, send `PREPARE-OK(view, op-num)` to primary
-4. **Commit**: When primary receives majority of PREPARE-OK, sends `COMMIT(view, commit-num)` to backups
-5. **Execute**: Backups execute committed operations and update state
+#### Client Request Processing
 
-### 2. View Change
-When primary fails or becomes unresponsive:
+**Message**: Client sends operation to primary
+**Internal State Changes**:
+1. **Primary receives client request**:
+   - Checks if request already processed (client_table lookup)
+   - If duplicate: return cached result
+   - If new: increment `op_number`
+   - Create log entry: `{view_number, op_number, operation, replica_id}`
+   - Append to `log`
+   - Initialize `prepare_ok_count[op_number] = 1` (self-vote)
 
-1. **Timeout**: Backup detects primary failure, increments view number
-2. **Start View Change**: Sends `START-VIEW-CHANGE(view, replica-id)` to all replicas
-3. **Do View Change**: When replica receives majority START-VIEW-CHANGE, sends `DO-VIEW-CHANGE(view, log, last-normal-view, op-num, commit-num)` to new primary
-4. **Start View**: New primary receives majority DO-VIEW-CHANGE, sends `START-VIEW(view, log, op-num, commit-num)` to all replicas
-5. **View Change OK**: Replicas update to new view, send `VIEW-CHANGE-OK(view)` to new primary
+#### Prepare Phase
 
-### 3. State Transfer
-When a replica falls behind:
+**Message**: Primary sends `PREPARE(view, op-num, operation, commit-num)` to all backups
+**Internal State Changes**:
+1. **Backup receives PREPARE**:
+   - Validates `view >= view_number`
+   - If `op_number > length(log)`: append operation to `log`
+   - Update `op_number = max(op_number, received_op_number)`
+   - Send `PREPARE-OK(view, op-num, replica-id)` to primary
 
-1. **Get State**: Lagging replica sends `GET-STATE(view, op-num)` to primary
-2. **New State**: Primary responds with `NEW-STATE(view, log, op-num, commit-num)`
-3. **Update**: Lagging replica updates its state to match
+2. **Primary receives PREPARE-OK**:
+   - Increment `prepare_ok_count[op_number]`
+   - If `prepare_ok_count[op_number] > majority`:
+     - Update `commit_number = max(commit_number, op_number)`
+     - Apply all operations where `log_op_number <= commit_number` to state machine
+     - Send `COMMIT(view, commit-num)` to all backups
+
+#### Commit Phase
+
+**Message**: Primary sends `COMMIT(view, commit-num)` to backups
+**Internal State Changes**:
+1. **Backup receives COMMIT**:
+   - Validates `view == view_number`
+   - If `commit_number < received_commit_number`:
+     - Update `commit_number = received_commit_number`
+     - Apply all operations where `log_op_number <= commit_number` to state machine
+     - Update client_table with results
+
+### 2. View Change Phase
+
+#### Detecting Primary Failure
+
+**Trigger**: Backup detects primary timeout or failure
+**Internal State Changes**:
+1. **Backup initiates view change**:
+   - Increment `view_number`
+   - Set `status = :view_change`
+   - Calculate new `primary = configuration[view_number % length(configuration)]`
+   - Initialize `view_change_votes[replica_id] = true`
+   - Send `START-VIEW-CHANGE(view, replica-id)` to all replicas
+
+#### Start View Change Phase
+
+**Message**: `START-VIEW-CHANGE(view, replica-id)` sent to all replicas
+**Internal State Changes**:
+1. **Replica receives START-VIEW-CHANGE**:
+   - If `view > view_number`:
+     - Update `view_number = view`
+     - Set `status = :view_change` 
+     - Update `primary = configuration[view % length(configuration)]`
+     - Set `view_change_votes[sender_id] = true`
+     - Send `START-VIEW-CHANGE-ACK(view, replica-id)` to sender
+   - If `count(view_change_votes) > majority`:
+     - Send `DO-VIEW-CHANGE(view, log, last_normal_view, op_number, commit_number, replica-id)` to new primary
+
+#### Do View Change Phase
+
+**Message**: `DO-VIEW-CHANGE(view, log, last_normal_view, op_number, commit_number, replica-id)` sent to new primary
+**Internal State Changes**:
+1. **New primary receives DO-VIEW-CHANGE**:
+   - If `view >= view_number`:
+     - Merge received log with local log (take highest op_number entries)
+     - Update `view_number = view`
+     - Update `log = merged_log`
+     - Update `op_number = max(op_number, received_op_number)`
+     - Update `commit_number = max(commit_number, received_commit_number)`
+     - Set `status = :normal`
+     - Send `START-VIEW(view, log, op_number, commit_number)` to all other replicas
+
+#### Start View Phase
+
+**Message**: `START-VIEW(view, log, op_number, commit_number)` sent from new primary
+**Internal State Changes**:
+1. **Replica receives START-VIEW**:
+   - If `view >= view_number`:
+     - Update `view_number = view`
+     - Replace `log = received_log`
+     - Update `op_number = received_op_number`
+     - Update `commit_number = received_commit_number`
+     - Set `status = :normal`
+     - Update `primary = configuration[view % length(configuration)]`
+     - Apply all committed operations to state machine
+     - Send `VIEW-CHANGE-OK(view, replica-id)` to new primary
+
+#### View Change Completion
+
+**Message**: `VIEW-CHANGE-OK(view, replica-id)` sent to new primary
+**Internal State Changes**:
+1. **New primary receives VIEW-CHANGE-OK**:
+   - Set `view_change_votes[sender_id] = true`
+   - If `count(view_change_votes) > majority`:
+     - Clear `view_change_votes = %{}`
+     - Set `last_normal_view = view`
+     - Resume normal operation
+
+### 3. State Transfer Phase
+
+#### Requesting State
+
+**Message**: Lagging replica sends `GET-STATE(view, op_number, replica-id)` to primary
+**Internal State Changes**:
+1. **Lagging replica initiates**:
+   - Detect it's behind (lower op_number or view_number)
+   - Send `GET-STATE(view_number, op_number, replica_id)` to primary
+
+2. **Primary receives GET-STATE**:
+   - Package current state: `{view_number, log, op_number, commit_number}`
+   - Send `NEW-STATE(view, log, op_number, commit_number)` to requester
+
+#### Receiving State
+
+**Message**: `NEW-STATE(view, log, op_number, commit_number)` sent from primary
+**Internal State Changes**:
+1. **Lagging replica receives NEW-STATE**:
+   - If `view >= view_number OR op_number > local_op_number`:
+     - Update `view_number = received_view`
+     - Replace `log = received_log`
+     - Update `op_number = received_op_number`
+     - Update `commit_number = received_commit_number`
+     - Set `status = :normal`
+     - Apply all committed operations to state machine
+     - Resume normal operation
 
 ## Message Types
 
-### Normal Operation
+### Normal Operation Messages
 - `PREPARE(view, op-num, operation, commit-num)`
 - `PREPARE-OK(view, op-num, replica-id)`
 - `COMMIT(view, commit-num)`
 
-### View Change
+### View Change Messages
 - `START-VIEW-CHANGE(view, replica-id)`
-- `DO-VIEW-CHANGE(view, log, last-normal-view, op-num, commit-num, replica-id)`
-- `START-VIEW(view, log, op-num, commit-num)`
+- `START-VIEW-CHANGE-ACK(view, replica-id)`
+- `DO-VIEW-CHANGE(view, log, last_normal_view, op_number, commit_number, replica-id)`
+- `START-VIEW(view, log, op_number, commit_number)`
 - `VIEW-CHANGE-OK(view, replica-id)`
 
-### State Transfer
-- `GET-STATE(view, op-num, replica-id)`
-- `NEW-STATE(view, log, op-num, commit-num)`
+### State Transfer Messages
+- `GET-STATE(view, op_number, replica-id)`
+- `NEW-STATE(view, log, op_number, commit_number)`
 
-### Client Operations
+### Client Messages
 - `REQUEST(operation, client-id, request-id)`
 - `REPLY(request-id, result)`
 
@@ -78,33 +214,45 @@ When a replica falls behind:
 1. **Termination**: Every operation eventually executes (assuming eventual synchrony)
 2. **View Change**: System eventually selects a new primary when current primary fails
 
-## Implementation Notes
+## State Machine Integration
 
-### Key-Value Store Operations
-- `GET(key)`: Retrieve value for key
-- `PUT(key, value)`: Store key-value pair
-- `DELETE(key)`: Remove key
+The VSR protocol is agnostic to the underlying state machine. Operations are applied in order to maintain consistency:
 
-### Replica State
-Each replica maintains:
-- **view_number**: Current view
-- **status**: `:normal`, `:view_change`, or `:recovering`
-- **op_number**: Highest operation number
-- **commit_number**: Highest committed operation number
-- **log**: Ordered list of operations
-- **replica_id**: Unique identifier
-- **configuration**: List of all replica IDs
-- **store**: ETS table for key-value storage
+```elixir
+defprotocol Vsr.StateMachine do
+  @doc "Apply an operation to the state machine"
+  def apply_operation(state_machine, operation)
+  
+  @doc "Get current state for state transfer"
+  def get_state(state_machine)
+  
+  @doc "Set state during state transfer"
+  def set_state(state_machine, state)
+end
+```
 
-### Failure Handling
-- Replicas use timeouts to detect primary failures
-- View changes require majority participation
-- State transfer handles replicas that fall behind
+## Log Storage Abstraction
 
-### Optimizations
-- Batching: Group multiple operations in single PREPARE message
-- Pipelining: Allow multiple outstanding operations
-- Read optimization: Reads can be served locally if replica is up-to-date
+The operation log can be implemented with different backends:
+
+```elixir
+defprotocol Vsr.Log do
+  @doc "Append operation to log"
+  def append(log, view, op_number, operation, sender_id)
+  
+  @doc "Get operation at index"
+  def get(log, index)
+  
+  @doc "Get all operations"
+  def get_all(log)
+  
+  @doc "Get operations from index onwards"
+  def get_from(log, index)
+  
+  @doc "Get log length"
+  def length(log)
+end
+```
 
 ## Correctness Conditions
 
@@ -113,4 +261,4 @@ Each replica maintains:
 3. **Primary Completeness**: New primary has all committed operations
 4. **Monotonicity**: View numbers and operation numbers never decrease
 
-This specification provides the foundation for implementing a correct and efficient VSR-based distributed key-value store.
+This specification provides the foundation for implementing a correct and efficient VSR-based distributed system with clear understanding of internal state transitions.
