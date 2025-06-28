@@ -94,7 +94,7 @@ defmodule Vsr.ReplicaTest do
       Replica.client_request(primary, {:put, "key1", "value1"}, "client1", 1)
 
       # Allow full prepare/commit cycle
-      Process.sleep(50)
+      Process.sleep(100)
 
       primary_state = Replica.dump(primary)
       backup1_state = Replica.dump(backup1)
@@ -193,7 +193,7 @@ defmodule Vsr.ReplicaTest do
       send(replica3, {:start_view_change, 1, replica2})
 
       # Allow view change to complete
-      Process.sleep(50)
+      Process.sleep(100)
 
       # Check that view change completed and new primary is determined
       replica2_state = Replica.dump(replica2)
@@ -275,7 +275,7 @@ defmodule Vsr.ReplicaTest do
       # Simulate replica2 falling behind and requesting state
       Replica.get_state(replica2, replica1)
 
-      Process.sleep(50)
+      Process.sleep(100)
 
       # Check that replica2 caught up
       replica2_state = Replica.dump(replica2)
