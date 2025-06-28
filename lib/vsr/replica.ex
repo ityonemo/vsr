@@ -5,7 +5,7 @@ defmodule Vsr.Replica do
   alias Vsr.Log
   alias Vsr.EtsLog
   alias Vsr.StateMachine
-  alias Vsr.KV
+  alias Vsr.KVStateMachine
 
   # Section 0: State
   defstruct [
@@ -132,19 +132,6 @@ defmodule Vsr.Replica do
           new_op_number = state.op_number + 1
           new_log = Log.append(state.log, state.view_number, new_op_number, operation, self())
 
-          # Send prepare messages to all connected backups
-          prepare_message = %Messages.Prepare{
-            view: state.view_number,
-            op_number: new_op_number,
-            operation: operation,
-            commit_number: state.commit_number,
-            sender: self()
-          }
-
-          for {replica_pid, _ref} <- state.connected_replicas do
-            Messages.vsr_send(replica_pid, prepare_message)
-          end
-
           new_state = %{
             state
             | op_number: new_op_number,
@@ -152,17 +139,6 @@ defmodule Vsr.Replica do
               prepare_ok_count: Map.put(state.prepare_ok_count, new_op_number, 1)
           }
 
-          {new_state_machine, result} = apply_and_get_result(new_state, new_op_number)
-          :ets.insert(state.client_table, {{client_id, request_id}, result})
-          send_client_reply(client_id, request_id, result)
-
-          new_state = %{
-            new_state
-            | commit_number: new_op_number,
-              state_machine: new_state_machine
-          }
-
-          {:noreply, new_state}
           # For single replica or when we have no connected replicas, commit immediately
           if MapSet.size(state.connected_replicas) == 0 do
             # Single replica - commit immediately
@@ -178,6 +154,19 @@ defmodule Vsr.Replica do
 
             {:noreply, new_state}
           else
+            # Send prepare messages to all connected backups
+            prepare_message = %Messages.Prepare{
+              view: state.view_number,
+              op_number: new_op_number,
+              operation: operation,
+              commit_number: state.commit_number,
+              sender: self()
+            }
+
+            for {replica_pid, _ref} <- state.connected_replicas do
+              Messages.vsr_send(replica_pid, prepare_message)
+            end
+
             {:noreply, new_state}
           end
       end
