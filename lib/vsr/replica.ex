@@ -11,7 +11,7 @@ defmodule Vsr.Replica do
   defstruct [
     :view_number,
     :status,
-    :op_number,
+    :_op_number,
     :commit_number,
     :log,
     :configuration,
@@ -20,7 +20,7 @@ defmodule Vsr.Replica do
     :primary,
     :state_machine,
     :blocking,
-    :client_table,
+    :_client_table,
     :prepare_ok_count,
     :view_change_votes,
     :last_normal_view
@@ -47,14 +47,14 @@ defmodule Vsr.Replica do
     # Monitor other replicas
     Process.flag(:trap_exit, true)
 
-    client_table = :ets.new(:client_table, [:set, :private])
+    _client_table = :ets.new(:_client_table, [:set, :private])
     log = EtsLog.new(nil)
     state_machine = state_machine_impl.new([])
 
     state = %__MODULE__{
       view_number: 0,
       status: :normal,
-      op_number: 0,
+      _op_number: 0,
       commit_number: 0,
       log: log,
       configuration: configuration,
@@ -63,7 +63,7 @@ defmodule Vsr.Replica do
       primary: primary_for_view(0, configuration),
       state_machine: state_machine,
       blocking: blocking,
-      client_table: client_table,
+      _client_table: _client_table,
       prepare_ok_count: %{},
       view_change_votes: %{},
       last_normal_view: 0
@@ -121,7 +121,7 @@ defmodule Vsr.Replica do
   defp client_request_impl({operation, client_id, request_id}, state) do
     if self() == state.primary and state.status == :normal do
       # Check if this request was already processed
-      case :ets.lookup(state.client_table, {client_id, request_id}) do
+      case :ets.lookup(state._client_table, {client_id, request_id}) do
         [{_, result}] ->
           # Already processed, return cached result
           send_client_reply(client_id, request_id, result)
@@ -129,13 +129,13 @@ defmodule Vsr.Replica do
 
         [] ->
           # New request, process it
-          new_op_number = state.op_number + 1
-          new_log = Log.append(state.log, state.view_number, new_op_number, operation, self())
+          new__op_number = state._op_number + 1
+          new_log = Log.append(state.log, state.view_number, new__op_number, operation, self())
 
           # Send prepare messages to all connected backups
           prepare_message = %Messages.Prepare{
             view: state.view_number,
-            op_number: new_op_number,
+            _op_number: new__op_number,
             operation: operation,
             commit_number: state.commit_number,
             sender: self()
@@ -147,21 +147,21 @@ defmodule Vsr.Replica do
 
           new_state = %{
             state
-            | op_number: new_op_number,
+            | _op_number: new__op_number,
               log: new_log,
-              prepare_ok_count: Map.put(state.prepare_ok_count, new_op_number, 1)
+              prepare_ok_count: Map.put(state.prepare_ok_count, new__op_number, 1)
           }
 
           # Check if we have majority immediately (single replica case)
           if MapSet.size(state.connected_replicas) == 0 do
             # Single replica - commit immediately
-            {new_state_machine, result} = apply_and_get_result(new_state, new_op_number)
-            :ets.insert(state.client_table, {{client_id, request_id}, result})
+            {new_state_machine, result} = apply_and_get_result(new_state, new__op_number)
+            :ets.insert(state._client_table, {{client_id, request_id}, result})
             send_client_reply(client_id, request_id, result)
 
             new_state = %{
               new_state
-              | commit_number: new_op_number,
+              | commit_number: new__op_number,
                 state_machine: new_state_machine
             }
 
@@ -177,8 +177,8 @@ defmodule Vsr.Replica do
   end
 
   # Helper to apply a specific operation and get its result
-  defp apply_and_get_result(state, op_number) do
-    case Log.get(state.log, op_number) do
+  defp apply_and_get_result(state, _op_number) do
+    case Log.get(state.log, _op_number) do
       {:ok, {_v, _op, operation, _sender_pid}} ->
         StateMachine.apply_operation(state.state_machine, operation)
 
@@ -193,16 +193,16 @@ defmodule Vsr.Replica do
          state_machine,
          old_commit_number,
          new_commit_number,
-         client_table
+         _client_table
        ) do
     operations_to_commit =
-      Enum.filter(log_entries, fn {_v, op_num, _operation, _sender_pid} ->
-        op_num > old_commit_number and op_num <= new_commit_number
+      Enum.filter(log_entries, fn {_v, _op_num, _operation, _sender_pid} ->
+        _op_num > old_commit_number and _op_num <= new_commit_number
       end)
 
     # Apply operations and collect results
-    {final_state_machine, _results} =
-      Enum.reduce(operations_to_commit, {state_machine, []}, fn {_v, op_num, operation,
+    {final_state_machine, results} =
+      Enum.reduce(operations_to_commit, {state_machine, []}, fn {_v, _op_num, operation,
                                                                  _sender_pid},
                                                                 {sm, results} ->
         {updated_sm, result} = StateMachine.apply_operation(sm, operation)
@@ -214,7 +214,7 @@ defmodule Vsr.Replica do
         {updated_sm, [result | results]}
       end)
 
-    {final_state_machine, Enum.reverse(_results)}
+    {final_state_machine, Enum.reverse(results)}
   end
 
   # Sending replies back to clients
@@ -276,7 +276,7 @@ defmodule Vsr.Replica do
     # Synchronously request state from target replica
     get_state_msg = %Messages.GetState{
       view: state.view_number,
-      op_number: state.op_number,
+      _op_number: state._op_number,
       sender: self()
     }
 
@@ -309,25 +309,25 @@ defmodule Vsr.Replica do
     if msg.view >= state.view_number do
       # Append to log if new operation
       cond do
-        msg.op_number > Log.length(state.log) ->
-          new_log = Log.append(state.log, msg.view, msg.op_number, msg.operation, msg.sender)
-          new_state = %{state | log: new_log, op_number: msg.op_number}
+        msg._op_number > Log.length(state.log) ->
+          new_log = Log.append(state.log, msg.view, msg._op_number, msg.operation, msg.sender)
+          new_state = %{state | log: new_log, _op_number: msg._op_number}
 
           # Send prepare-ok back to sender
           prepare_ok_msg = %Messages.PrepareOk{
             view: msg.view,
-            op_number: msg.op_number,
+            _op_number: msg._op_number,
             sender: self()
           }
 
           Messages.vsr_send(msg.sender, prepare_ok_msg)
           {:noreply, new_state}
 
-        msg.op_number <= Log.length(state.log) ->
+        msg._op_number <= Log.length(state.log) ->
           # Already have operation, just send ok
           prepare_ok_msg = %Messages.PrepareOk{
             view: msg.view,
-            op_number: msg.op_number,
+            _op_number: msg._op_number,
             sender: self()
           }
 
@@ -341,8 +341,8 @@ defmodule Vsr.Replica do
 
   def handle_info(%Messages.PrepareOk{} = msg, state) do
     if msg.view == state.view_number and self() == state.primary do
-      current_count = Map.get(state.prepare_ok_count, msg.op_number, 0) + 1
-      new_prepare_ok_count = Map.put(state.prepare_ok_count, msg.op_number, current_count)
+      current_count = Map.get(state.prepare_ok_count, msg._op_number, 0) + 1
+      new_prepare_ok_count = Map.put(state.prepare_ok_count, msg._op_number, current_count)
 
       # +1 for self
       connected_count = MapSet.size(state.connected_replicas) + 1
@@ -350,7 +350,7 @@ defmodule Vsr.Replica do
       # Check if we have majority
       if current_count > div(connected_count, 2) do
         # Majority received, commit operation and send commit messages
-        new_commit_number = max(state.commit_number, msg.op_number)
+        new_commit_number = max(state.commit_number, msg._op_number)
 
         # Apply all operations up to commit point and send client replies
         log_entries = Log.get_all(state.log)
@@ -361,7 +361,7 @@ defmodule Vsr.Replica do
             state.state_machine,
             state.commit_number,
             new_commit_number,
-            state.client_table
+            state._client_table
           )
 
         # Send commit messages to connected replicas
@@ -400,7 +400,7 @@ defmodule Vsr.Replica do
           state.state_machine,
           state.commit_number,
           msg.commit_number,
-          state.client_table
+          state._client_table
         )
 
       new_state = %{state | commit_number: msg.commit_number, state_machine: new_state_machine}
@@ -452,7 +452,7 @@ defmodule Vsr.Replica do
         | view_number: msg.view,
           log: new_log,
           last_normal_view: msg.last_normal_view,
-          op_number: msg.op_number,
+          _op_number: msg._op_number,
           commit_number: msg.commit_number,
           status: :normal,
           primary: primary_for_view(msg.view, state.configuration)
@@ -462,7 +462,7 @@ defmodule Vsr.Replica do
       start_view_msg = %Messages.StartView{
         view: msg.view,
         log: msg.log,
-        op_number: msg.op_number,
+        _op_number: msg._op_number,
         commit_number: msg.commit_number
       }
 
@@ -484,7 +484,7 @@ defmodule Vsr.Replica do
         state
         | view_number: msg.view,
           log: new_log,
-          op_number: msg.op_number,
+          _op_number: msg._op_number,
           commit_number: msg.commit_number,
           status: :normal,
           primary: primary_for_view(msg.view, state.configuration)
@@ -533,7 +533,7 @@ defmodule Vsr.Replica do
     new_state_msg = %Messages.NewState{
       view: state.view_number,
       log: log_entries,
-      op_number: state.op_number,
+      _op_number: state._op_number,
       commit_number: state.commit_number,
       state_machine_state: state_machine_state
     }
@@ -543,7 +543,7 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.NewState{} = msg, state) do
-    if msg.view >= state.view_number or msg.op_number > state.op_number do
+    if msg.view >= state.view_number or msg._op_number > state._op_number do
       # Replace our log with the new log
       new_log = EtsLog.new(nil) |> Log.replace(msg.log)
 
@@ -554,7 +554,7 @@ defmodule Vsr.Replica do
         state
         | view_number: msg.view,
           log: new_log,
-          op_number: msg.op_number,
+          _op_number: msg._op_number,
           commit_number: msg.commit_number,
           status: :normal,
           state_machine: new_state_machine
@@ -569,7 +569,7 @@ defmodule Vsr.Replica do
   def handle_info({:request_state_from, target_replica}, state) do
     get_state_msg = %Messages.GetState{
       view: state.view_number,
-      op_number: state.op_number,
+      _op_number: state._op_number,
       sender: self()
     }
 
@@ -582,8 +582,8 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
-  defp commit_operation(state, op_number) do
-    case Log.get(state.log, op_number) do
+  defp commit_operation(state, _op_number) do
+    case Log.get(state.log, _op_number) do
       {:error, :not_found} ->
         :ok
 
