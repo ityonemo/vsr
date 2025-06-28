@@ -261,10 +261,11 @@ defmodule Vsr.Replica do
       send_to_replica(replica_id, {:start_view_change, new_view_number, state.replica_id})
     end
 
-    state = %{
-      state
+    new_state = %{
+      new_state
       | view_number: new_view_number,
         status: :view_change,
+        primary: primary_for_view(new_view_number, state.configuration),
         view_change_votes: Map.put(state.view_change_votes, state.replica_id, true)
     }
 
