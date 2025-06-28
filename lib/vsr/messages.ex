@@ -56,7 +56,7 @@ defmodule Vsr.Messages do
 
   defmodule NewState do
     @moduledoc "NEW-STATE response containing replica state"
-    defstruct [:view, :log, :op_number, :commit_number]
+    defstruct [:view, :log, :op_number, :commit_number, :state_machine_state]
   end
 
   # Client Messages
