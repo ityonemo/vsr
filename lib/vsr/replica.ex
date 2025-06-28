@@ -88,18 +88,6 @@ defmodule Vsr.Replica do
     GenServer.cast(pid, {:client_request, operation, client_id, request_id})
   end
 
-  @spec get(pid(), term()) :: {:ok, term()} | {:error, :not_found}
-  def get(pid, key) do
-    GenServer.call(pid, {:get, key})
-  end
-
-  @spec put(pid(), term(), term()) :: :ok
-  def put(pid, key, value) do
-    GenServer.call(pid, {:put, key, value})
-  end
-
-  @spec delete(pid(), term()) :: :ok
-  def delete(pid, key) do
     GenServer.call(pid, {:delete, key})
   end
 
@@ -183,94 +171,20 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp get_impl({key}, _from, state) do
-    {_updated_state_machine, result} =
-      StateMachine.apply_operation(state.state_machine, {:get, key})
 
-    {:reply, result, state}
-  end
-
-  defp put_impl({key, value}, from, state) do
-    if state.blocking do
-      # For blocking replicas, block until unblocked
-      receive do
-        %Messages.Unblock{} ->
-          put_impl_internal({key, value}, from, state)
-      end
     else
       put_impl_internal({key, value}, from, state)
     end
   end
 
-  defp put_impl_internal({key, value}, _from, state) do
-    # Always use VSR protocol for logging
-    operation = {:put, key, value}
-    new_op_number = state.op_number + 1
-
-    new_log = Log.append(state.log, state.view_number, new_op_number, operation, self())
-
-    if MapSet.size(state.connected_replicas) == 0 do
-      {new_state_machine, _result} = StateMachine.apply_operation(state.state_machine, operation)
-
-      new_state = %{
-        state
-        | op_number: new_op_number,
-          log: new_log,
-          commit_number: new_op_number,
-          state_machine: new_state_machine
-      }
-
-      {:reply, :ok, new_state}
-    else
-      # Multi-replica: use full VSR protocol
-      new_state = %{state | op_number: new_op_number, log: new_log}
-
-      case client_request_impl({operation, self(), :os.system_time(:microsecond)}, new_state) do
-        {:noreply, updated_state} -> {:reply, :ok, updated_state}
-        other -> other
-      end
     end
   end
 
-  defp delete_impl({key}, from, state) do
-    if state.blocking do
-      # For blocking replicas, block until unblocked
-      receive do
-        %Messages.Unblock{} ->
-          delete_impl_internal({key}, from, state)
-      end
     else
       delete_impl_internal({key}, from, state)
     end
   end
 
-  defp delete_impl_internal({key}, _from, state) do
-    # Always use VSR protocol for logging
-    operation = {:delete, key}
-    new_op_number = state.op_number + 1
-
-    new_log = Log.append(state.log, state.view_number, new_op_number, operation, self())
-
-    if MapSet.size(state.connected_replicas) == 0 do
-      {new_state_machine, _result} = StateMachine.apply_operation(state.state_machine, operation)
-
-      new_state = %{
-        state
-        | op_number: new_op_number,
-          log: new_log,
-          commit_number: new_op_number,
-          state_machine: new_state_machine
-      }
-
-      {:reply, :ok, new_state}
-    else
-      # Multi-replica: use full VSR protocol
-      new_state = %{state | op_number: new_op_number, log: new_log}
-
-      case client_request_impl({operation, self(), :os.system_time(:microsecond)}, new_state) do
-        {:noreply, updated_state} -> {:reply, :ok, updated_state}
-        other -> other
-      end
     end
   end
 
@@ -290,13 +204,7 @@ defmodule Vsr.Replica do
     connect_impl({target_replica_pid}, from, state)
   end
 
-  def handle_call({:get, key}, from, state) do
-    get_impl({key}, from, state)
-  end
 
-  def handle_call({:put, key, value}, from, state) do
-    put_impl({key, value}, from, state)
-  end
 
   def handle_call({:update_configuration, new_configuration}, _from, state) do
     new_state = %{
@@ -309,9 +217,6 @@ defmodule Vsr.Replica do
     {:reply, :ok, new_state}
   end
 
-  def handle_call({:delete, key}, from, state) do
-    delete_impl({key}, from, state)
-  end
 
   def handle_cast({:client_request, operation, client_id, request_id}, state) do
     client_request_impl({operation, client_id, request_id}, state)
