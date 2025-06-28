@@ -519,6 +519,10 @@ defmodule Vsr.Replica do
 
   def handle_info({:get_state, _view_number, _op_number, requester}, state) do
     IO.puts(
+      "Replica #{inspect(self())} state before sending: commit=#{state.commit_number}, op=#{state.op_number}"
+    )
+
+    IO.puts(
       "Sending state to #{inspect(requester)}: view=#{state.view_number}, op=#{state.op_number}, log_length=#{length(state.log)}"
     )
 
