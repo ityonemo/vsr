@@ -6,8 +6,6 @@ defmodule Vsr.EtsLog do
   Each log is backed by an ETS table with operation numbers as keys.
   """
 
-  @behaviour Vsr.Log
-
   defstruct [:table_id, :length]
 
   @type t :: %__MODULE__{
@@ -15,13 +13,11 @@ defmodule Vsr.EtsLog do
           length: non_neg_integer()
         }
 
-  @impl Vsr.Log
-  def new(_opts \\ []) do
+  def new(_log_impl, opts \\ []) do
     table_id = :ets.new(:vsr_log, [:ordered_set, :private])
     %__MODULE__{table_id: table_id, length: 0}
   end
 
-  @impl Vsr.Log
   def append(
         %__MODULE__{table_id: table_id, length: current_length} = log,
         view,
@@ -34,7 +30,6 @@ defmodule Vsr.EtsLog do
     %{log | length: max(current_length, op_number)}
   end
 
-  @impl Vsr.Log
   def get(%__MODULE__{table_id: table_id}, op_number) do
     case :ets.lookup(table_id, op_number) do
       [{^op_number, entry}] -> {:ok, entry}
@@ -42,7 +37,6 @@ defmodule Vsr.EtsLog do
     end
   end
 
-  @impl Vsr.Log
   def get_all(%__MODULE__{table_id: table_id}) do
     table_id
     |> :ets.tab2list()
@@ -50,7 +44,6 @@ defmodule Vsr.EtsLog do
     |> Enum.map(fn {_op_number, entry} -> entry end)
   end
 
-  @impl Vsr.Log
   def get_from(%__MODULE__{table_id: table_id}, op_number) do
     table_id
     |> :ets.tab2list()
@@ -59,10 +52,8 @@ defmodule Vsr.EtsLog do
     |> Enum.map(fn {_op_num, entry} -> entry end)
   end
 
-  @impl Vsr.Log
   def length(%__MODULE__{length: length}), do: length
 
-  @impl Vsr.Log
   def replace(%__MODULE__{table_id: table_id} = log, entries) do
     # Clear existing entries
     :ets.delete_all_objects(table_id)
@@ -78,7 +69,6 @@ defmodule Vsr.EtsLog do
     %{log | length: new_length}
   end
 
-  @impl Vsr.Log
   def clear(%__MODULE__{table_id: table_id} = log) do
     :ets.delete_all_objects(table_id)
     %{log | length: 0}
@@ -94,7 +84,7 @@ defmodule Vsr.EtsLog do
 end
 
 defimpl Vsr.Log, for: Vsr.EtsLog do
-  def new(opts), do: Vsr.EtsLog.new(opts)
+  def new(log_impl, opts), do: Vsr.EtsLog.new(log_impl, opts)
 
   def append(log, view, op_number, operation, sender_id),
     do: Vsr.EtsLog.append(log, view, op_number, operation, sender_id)
