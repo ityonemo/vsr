@@ -527,26 +527,6 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
-        if op <= commit_number do
-          apply_operation(state, operation)
-        end
-      end)
-
-      new_state = %{
-        state
-        | view_number: new_view_number,
-          log: log,
-          op_number: op_number,
-          commit_number: commit_number,
-          status: :normal
-      }
-
-      {:noreply, new_state}
-    else
-      {:noreply, state}
-    end
-  end
-
   def handle_info({:request_state_from, target_replica}, state) do
     send(target_replica, {:get_state, state.view_number, state.op_number, self()})
     {:noreply, state}
