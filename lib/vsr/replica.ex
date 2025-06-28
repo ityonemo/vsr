@@ -119,6 +119,20 @@ defmodule Vsr.Replica do
   end
 
   defp client_request_impl({operation, client_id, request_id}, state) do
+    # Handle blocking behavior
+    if state.blocking do
+      # Wait for unblock message
+      receive do
+        %Messages.Unblock{} ->
+          # Continue with processing
+          process_client_request(operation, client_id, request_id, state)
+      end
+    else
+      process_client_request(operation, client_id, request_id, state)
+    end
+  end
+
+  defp process_client_request(operation, client_id, request_id, state) do
     if self() == state.primary and state.status == :normal do
       # Check if this request was already processed
       case :ets.lookup(state.client_table, {client_id, request_id}) do
@@ -578,7 +592,7 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.Unblock{}, state) do
-    # This message is handled by the blocking receive in put_impl/delete_impl
+    # This message is handled by the blocking receive in client_request_impl
     {:noreply, state}
   end
 
