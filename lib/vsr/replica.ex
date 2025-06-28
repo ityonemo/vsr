@@ -186,6 +186,46 @@ defmodule Vsr.Replica do
         {:unblock, _} -> {:noreply, state}
       end
     else
+      {:noreply, state}
+    end
+  end
+  defp maybe_block_and_reply(state) do
+    if state.blocking do
+      receive do
+        {:unblock, _} -> {:noreply, state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
+  defp maybe_block_and_reply(state) do
+    if state.blocking do
+      receive do
+        {:unblock, _} -> {:noreply, state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
+  defp maybe_block_and_reply(state) do
+    if state.blocking do
+      receive do
+        {:unblock, _} -> {:noreply, state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
+  defp maybe_block_and_reply(state) do
+    if state.blocking do
+      receive do
+        {:unblock, _} -> {:noreply, state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
+    else
       # Reply sent via GenServer call mechanism
       {:noreply, state}
     end
