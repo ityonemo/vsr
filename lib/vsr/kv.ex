@@ -8,6 +8,7 @@ defmodule Vsr.KV do
   """
 
   alias Vsr.Replica
+  alias Vsr.Messages
 
   defstruct [:replica_pid]
 
@@ -49,21 +50,60 @@ defmodule Vsr.KV do
   Store a key-value pair.
   """
   def put(%__MODULE__{replica_pid: replica_pid}, key, value) do
-    Replica.put(replica_pid, key, value)
+    operation = {:put, key, value}
+    request_id = make_ref()
+    client_id = self()
+
+    Replica.client_request(replica_pid, operation, client_id, request_id)
+
+    # Wait for reply
+    receive do
+      %Messages.ClientReply{request_id: ^request_id, result: result} ->
+        result
+    after
+      5000 ->
+        {:error, :timeout}
+    end
   end
 
   @doc """
   Retrieve a value by key.
   """
   def get(%__MODULE__{replica_pid: replica_pid}, key) do
-    Replica.get(replica_pid, key)
+    operation = {:get, key}
+    request_id = make_ref()
+    client_id = self()
+
+    Replica.client_request(replica_pid, operation, client_id, request_id)
+
+    # Wait for reply
+    receive do
+      %Messages.ClientReply{request_id: ^request_id, result: result} ->
+        result
+    after
+      5000 ->
+        {:error, :timeout}
+    end
   end
 
   @doc """
   Delete a key-value pair.
   """
   def delete(%__MODULE__{replica_pid: replica_pid}, key) do
-    Replica.delete(replica_pid, key)
+    operation = {:delete, key}
+    request_id = make_ref()
+    client_id = self()
+
+    Replica.client_request(replica_pid, operation, client_id, request_id)
+
+    # Wait for reply
+    receive do
+      %Messages.ClientReply{request_id: ^request_id, result: result} ->
+        result
+    after
+      5000 ->
+        {:error, :timeout}
+    end
   end
 
   @doc """
