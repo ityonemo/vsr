@@ -163,6 +163,11 @@ defmodule Vsr.Replica do
   end
 
   defp put_impl_internal({key, value}, _from, state) do
+    # Debug logging
+    IO.puts(
+      "PUT_IMPL_INTERNAL: replica #{state.replica_id}, config: #{inspect(state.configuration)}, length: #{length(state.configuration)}"
+    )
+
     # Always use VSR protocol for logging, even single replica
     operation = {:put, key, value}
     new_op_number = state.op_number + 1
