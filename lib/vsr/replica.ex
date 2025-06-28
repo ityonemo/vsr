@@ -88,9 +88,6 @@ defmodule Vsr.Replica do
     GenServer.cast(pid, {:client_request, operation, client_id, request_id})
   end
 
-    GenServer.call(pid, {:delete, key})
-  end
-
   @spec start_view_change(pid()) :: :ok
   def start_view_change(pid) do
     GenServer.cast(pid, {:start_view_change})
@@ -171,23 +168,6 @@ defmodule Vsr.Replica do
     end
   end
 
-
-    else
-      put_impl_internal({key, value}, from, state)
-    end
-  end
-
-    end
-  end
-
-    else
-      delete_impl_internal({key}, from, state)
-    end
-  end
-
-    end
-  end
-
   # Sending replies back to clients
   defp send_client_reply(client_id, request_id, result) do
     reply = %Messages.ClientReply{request_id: request_id, result: result}
@@ -204,8 +184,6 @@ defmodule Vsr.Replica do
     connect_impl({target_replica_pid}, from, state)
   end
 
-
-
   def handle_call({:update_configuration, new_configuration}, _from, state) do
     new_state = %{
       state
@@ -216,7 +194,6 @@ defmodule Vsr.Replica do
 
     {:reply, :ok, new_state}
   end
-
 
   def handle_cast({:client_request, operation, client_id, request_id}, state) do
     client_request_impl({operation, client_id, request_id}, state)
