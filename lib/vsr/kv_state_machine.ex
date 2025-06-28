@@ -10,11 +10,11 @@ defmodule Vsr.KVStateMachine do
   defstruct [:data]
 
   def new(_opts) do
-    %__MODULE__{
+    %__MODULE__{data: %{}}
   end
 
   defimpl Vsr.StateMachine, for: __MODULE__ do
-    def new(state_machine, _opts) do
+    def new(_state_machine, _opts) do
       %Vsr.KVStateMachine{data: %{}}
     end
 
@@ -33,7 +33,7 @@ defmodule Vsr.KVStateMachine do
 
         {:delete, key} ->
           new_data = Map.delete(state_machine.data, key)
-          new_state_machine = %{state_machinedata}
+          new_state_machine = %{state_machine | data: new_data}
           {new_state_machine, :ok}
 
         _ ->
