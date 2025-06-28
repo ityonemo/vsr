@@ -25,7 +25,7 @@ defmodule Vsr.Replica do
   # Section 1: Initialization
   def start_link(opts) do
     replica_id = Keyword.fetch!(opts, :replica_id)
-    name = Keyword.get(opts, :name, via_tuple(replica_id))
+    _name = Keyword.get(opts, :name, via_tuple(replica_id))
     configuration = Keyword.fetch!(opts, :configuration)
     total_quorum_number = Keyword.get(opts, :total_quorum_number, length(configuration))
     blocking = Keyword.get(opts, :blocking, false)
