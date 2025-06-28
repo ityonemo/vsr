@@ -43,6 +43,6 @@ defprotocol Vsr.StateMachine do
 
   Used during replica initialization to create a fresh state machine.
   """
-  @spec new(state_machine_impl :: module(), opts :: keyword()) :: t()
+  @spec new(opts :: keyword()) :: t()
   def new(opts \\ [])
 end
