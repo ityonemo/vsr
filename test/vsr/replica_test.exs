@@ -40,6 +40,14 @@ defmodule Vsr.ReplicaTest do
       {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
       {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
 
+      # Connect replicas to each other
+      Replica.connect(primary, backup1)
+      Replica.connect(primary, backup2)
+      Replica.connect(backup1, primary)
+      Replica.connect(backup1, backup2)
+      Replica.connect(backup2, primary)
+      Replica.connect(backup2, backup1)
+
       %{primary: primary, backup1: backup1, backup2: backup2}
     end
 
@@ -88,6 +96,16 @@ defmodule Vsr.ReplicaTest do
   describe "normal operation - backup" do
     setup do
       {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
+      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
+      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+
+      # Connect replicas to each other
+      Replica.connect(primary, backup1)
+      Replica.connect(primary, backup2)
+      Replica.connect(backup1, primary)
+      Replica.connect(backup1, backup2)
+      Replica.connect(backup2, primary)
+      Replica.connect(backup2, backup1)
       {:ok, backup} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
 
       %{primary: primary, backup: backup}
@@ -123,6 +141,17 @@ defmodule Vsr.ReplicaTest do
 
   describe "view change" do
     setup do
+      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
+      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
+      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+
+      # Connect replicas to each other
+      Replica.connect(primary, backup1)
+      Replica.connect(primary, backup2)
+      Replica.connect(backup1, primary)
+      Replica.connect(backup1, backup2)
+      Replica.connect(backup2, primary)
+      Replica.connect(backup2, backup1)
       {:ok, replica1} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
       {:ok, replica2} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
       {:ok, replica3} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
@@ -165,6 +194,17 @@ defmodule Vsr.ReplicaTest do
 
   describe "key-value operations" do
     setup do
+      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
+      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
+      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+
+      # Connect replicas to each other
+      Replica.connect(primary, backup1)
+      Replica.connect(primary, backup2)
+      Replica.connect(backup1, primary)
+      Replica.connect(backup1, backup2)
+      Replica.connect(backup2, primary)
+      Replica.connect(backup2, backup1)
       {:ok, replica} = Replica.start_link(replica_id: 1, configuration: [1])
       %{replica: replica}
     end
@@ -215,6 +255,17 @@ defmodule Vsr.ReplicaTest do
 
   describe "state transfer" do
     setup do
+      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
+      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
+      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
+
+      # Connect replicas to each other
+      Replica.connect(primary, backup1)
+      Replica.connect(primary, backup2)
+      Replica.connect(backup1, primary)
+      Replica.connect(backup1, backup2)
+      Replica.connect(backup2, primary)
+      Replica.connect(backup2, backup1)
       {:ok, replica1} = Replica.start_link(replica_id: 1, configuration: [1, 2])
       {:ok, replica2} = Replica.start_link(replica_id: 2, configuration: [1, 2])
 
