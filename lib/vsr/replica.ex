@@ -527,10 +527,6 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
-  def handle_info({:new_state, new_view_number, log, op_number, commit_number}, state) do
-    if new_view_number >= state.view_number or op_number > state.op_number do
-      # Apply all operations from new state
-      Enum.each(log, fn {_v, op, operation, _sender_pid} ->
         if op <= commit_number do
           apply_operation(state, operation)
         end
