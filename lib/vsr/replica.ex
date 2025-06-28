@@ -200,6 +200,7 @@ defmodule Vsr.Replica do
     # Apply operation immediately for single replica
     IO.puts(
       "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
+      IO.puts("DEBUG: connected_replicas size: #{MapSet.size(state.connected_replicas)}")
     )
 
     if MapSet.size(state.connected_replicas) == 0 do
@@ -246,6 +247,7 @@ defmodule Vsr.Replica do
     # Apply operation immediately for single replica
     IO.puts(
       "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
+      IO.puts("DEBUG: connected_replicas size: #{MapSet.size(state.connected_replicas)}")
     )
 
     if MapSet.size(state.connected_replicas) == 0 do
