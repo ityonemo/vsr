@@ -49,18 +49,6 @@ defmodule Vsr.ReplicaTest do
       {:ok, backup1} = Replica.start_link(configuration: [], name: nil)
       {:ok, backup2} = Replica.start_link(configuration: [], name: nil)
 
-      # Update configuration to include all replicas
-      configuration = [primary, backup1, backup2]
-
-      # Restart replicas with proper configuration
-      GenServer.stop(primary)
-      GenServer.stop(backup1)
-      GenServer.stop(backup2)
-
-      {:ok, primary} = Replica.start_link(configuration: configuration, name: nil)
-      {:ok, backup1} = Replica.start_link(configuration: configuration, name: nil)
-      {:ok, backup2} = Replica.start_link(configuration: configuration, name: nil)
-
       # Connect replicas to each other
       Replica.connect(primary, backup1)
       Replica.connect(primary, backup2)
