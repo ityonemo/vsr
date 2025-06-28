@@ -19,7 +19,6 @@ defmodule Vsr.Replica do
     :connected_replicas,
     :primary,
     :state_machine,
-    :blocking,
     :client_table,
     :prepare_ok_count,
     :view_change_votes,
@@ -30,7 +29,6 @@ defmodule Vsr.Replica do
   def start_link(opts) do
     configuration = Keyword.fetch!(opts, :configuration)
     total_quorum_number = Keyword.get(opts, :total_quorum_number, length(configuration))
-    blocking = Keyword.get(opts, :blocking, false)
     state_machine_impl = Keyword.get(opts, :state_machine, Vsr.KVStateMachine)
     name = Keyword.get(opts, :name)
 
@@ -38,12 +36,12 @@ defmodule Vsr.Replica do
 
     GenServer.start_link(
       __MODULE__,
-      {configuration, total_quorum_number, blocking, state_machine_impl},
+      {configuration, total_quorum_number, state_machine_impl},
       start_opts
     )
   end
 
-  def init({configuration, total_quorum_number, blocking, state_machine_impl}) do
+  def init({configuration, total_quorum_number, state_machine_impl}) do
     # Monitor other replicas
     Process.flag(:trap_exit, true)
 
@@ -62,7 +60,6 @@ defmodule Vsr.Replica do
       connected_replicas: MapSet.new(),
       primary: primary_for_view(0, configuration),
       state_machine: state_machine,
-      blocking: blocking,
       client_table: client_table,
       prepare_ok_count: %{},
       view_change_votes: %{},
@@ -119,20 +116,6 @@ defmodule Vsr.Replica do
   end
 
   defp client_request_impl({operation, client_id, request_id}, state) do
-    # Handle blocking behavior
-    if state.blocking do
-      # Wait for unblock message
-      receive do
-        %Messages.Unblock{} ->
-          # Continue with processing
-          process_client_request(operation, client_id, request_id, state)
-      end
-    else
-      process_client_request(operation, client_id, request_id, state)
-    end
-  end
-
-  defp process_client_request(operation, client_id, request_id, state) do
     if self() == state.primary and state.status == :normal do
       # Check if this request was already processed
       case :ets.lookup(state.client_table, {client_id, request_id}) do
@@ -362,7 +345,7 @@ defmodule Vsr.Replica do
       connected_count = MapSet.size(state.connected_replicas) + 1
 
       # Check if we have majority
-      if current_count > div(connected_count, 2) do
+      if current_count > div(connected_count, 2) then
         # Majority received, commit operation and send commit messages
         new_commit_number = max(state.commit_number, msg.op_number)
 
@@ -588,11 +571,6 @@ defmodule Vsr.Replica do
     }
 
     Messages.vsr_send(target_replica, get_state_msg)
-    {:noreply, state}
-  end
-
-  def handle_info(%Messages.Unblock{}, state) do
-    # This message is handled by the blocking receive in client_request_impl
     {:noreply, state}
   end
 
