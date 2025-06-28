@@ -252,22 +252,6 @@ defmodule Vsr.Replica do
     send(client_id, {:reply, request_id, result})
   end
 
-  # Sending messages to connected replicas
-  defp send_to_replica(state, _replica_id, message) do
-    # Find the replica in connected replicas by matching replica_id
-    connected_replica =
-      Enum.find(state.connected_replicas, fn {_pid, _ref} ->
-        # We'd need to track replica_id -> pid mapping for this to work properly
-        # For now, send to all connected replicas
-        true
-      end)
-
-    case connected_replica do
-      {pid, _ref} -> send(pid, message)
-      nil -> :ok
-    end
-  end
-
   # Handling GenServer callbacks
 
   def handle_call({:dump}, from, state) do
