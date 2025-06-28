@@ -13,7 +13,7 @@ defmodule Vsr.EtsLog do
           length: non_neg_integer()
         }
 
-  def new(_log_impl, opts \\ []) do
+  def new(_log_impl, _opts \\ []) do
     table_id = :ets.new(:vsr_log, [:ordered_set, :private])
     %__MODULE__{table_id: table_id, length: 0}
   end
