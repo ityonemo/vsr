@@ -9,6 +9,10 @@ defmodule Vsr.KVStateMachine do
 
   defstruct [:data]
 
+  def new(_opts) do
+    %__MODULE__{data: %{}}
+  end
+
   defimpl Vsr.StateMachine, for: __MODULE__ do
     def new(_opts) do
       %Vsr.KVStateMachine{data: %{}}
