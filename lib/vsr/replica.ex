@@ -564,9 +564,17 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.NewState{} = msg, state) do
+    IO.puts(
+      "NewState received: view=#{msg.view}, op=#{msg.op_number}, commit=#{msg.commit_number}, log_length=#{length(msg.log)}"
+    )
+
     if msg.view >= state.view_number or msg.op_number > state.op_number do
       # Apply all committed operations from new state to our ETS store
       Enum.each(msg.log, fn {_v, op, operation, _sender_pid} ->
+        IO.puts(
+          "  Applying operation #{op}: #{inspect(operation)} (committed? #{op <= msg.commit_number})"
+        )
+
         if op <= msg.commit_number do
           apply_operation(state, operation)
         end
