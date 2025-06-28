@@ -551,6 +551,10 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.GetState{} = msg, state) do
+    IO.puts(
+      "GetState: sender state - view=#{state.view_number}, op=#{state.op_number}, commit=#{state.commit_number}"
+    )
+
     # Always send state regardless of view number
     new_state_msg = %Messages.NewState{
       view: state.view_number,
