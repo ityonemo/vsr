@@ -193,19 +193,8 @@ defmodule Vsr.ReplicaTest do
   end
 
   describe "key-value operations" do
-    setup do
-      {:ok, primary} = Replica.start_link(replica_id: 1, configuration: [1, 2, 3])
-      {:ok, backup1} = Replica.start_link(replica_id: 2, configuration: [1, 2, 3])
-      {:ok, backup2} = Replica.start_link(replica_id: 3, configuration: [1, 2, 3])
 
-      # Connect replicas to each other
-      Replica.connect(primary, backup1)
-      Replica.connect(primary, backup2)
-      Replica.connect(backup1, primary)
-      Replica.connect(backup1, backup2)
-      Replica.connect(backup2, primary)
-      Replica.connect(backup2, backup1)
-      {:ok, replica} = Replica.start_link(replica_id: 1, configuration: [1], name: nil)
+      {:ok, replica} = Replica.start_link(replica_id: 4, configuration: [4], name: nil)
       %{replica: replica}
     end
 
