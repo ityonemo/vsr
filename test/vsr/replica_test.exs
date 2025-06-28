@@ -49,6 +49,12 @@ defmodule Vsr.ReplicaTest do
       {:ok, backup1} = Replica.start_link(configuration: [], name: nil)
       {:ok, backup2} = Replica.start_link(configuration: [], name: nil)
 
+      # Update each replica's configuration to know about all replicas
+      configuration = [primary, backup1, backup2]
+      GenServer.call(primary, {:update_configuration, configuration})
+      GenServer.call(backup1, {:update_configuration, configuration})
+      GenServer.call(backup2, {:update_configuration, configuration})
+
       # Connect replicas to each other
       Replica.connect(primary, backup1)
       Replica.connect(primary, backup2)
@@ -149,14 +155,10 @@ defmodule Vsr.ReplicaTest do
 
       configuration = [replica1, replica2, replica3]
 
-      # Restart with proper configuration
-      GenServer.stop(replica1)
-      GenServer.stop(replica2)
-      GenServer.stop(replica3)
-
-      {:ok, replica1} = Replica.start_link(configuration: configuration, name: nil)
-      {:ok, replica2} = Replica.start_link(configuration: configuration, name: nil)
-      {:ok, replica3} = Replica.start_link(configuration: configuration, name: nil)
+      # Update each replica's configuration
+      GenServer.call(replica1, {:update_configuration, configuration})
+      GenServer.call(replica2, {:update_configuration, configuration})
+      GenServer.call(replica3, {:update_configuration, configuration})
 
       # Connect replicas to each other
       Replica.connect(replica1, replica2)
