@@ -143,8 +143,14 @@ defmodule Vsr.Replica do
   end
 
   defp put_impl({key, value}, _from, state) do
-    # For single replica or direct API calls, execute immediately
-    :ets.insert(state.store, {key, value})
+    if state.blocking do
+      receive do
+        {:unblock, _id} -> :ets.insert(state.store, {key, value})
+      end
+    else
+      :ets.insert(state.store, {key, value})
+    end
+
     # Always return ok for put operations
     {:reply, :ok, state}
   end
