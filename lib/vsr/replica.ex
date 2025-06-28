@@ -278,30 +278,6 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
-  def handle_cast({:get_state, target_replica}, state) do
-    # Synchronously request state from target replica
-    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
-    {:noreply, state}
-  end
-
-  def handle_cast({:get_state, target_replica}, state) do
-    # Synchronously request state from target replica
-    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
-    {:noreply, state}
-  end
-
-  def handle_cast({:get_state, target_replica}, state) do
-    # Synchronously request state from target replica
-    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
-    {:noreply, state}
-  end
-
-  def handle_cast({:get_state, target_replica}, state) do
-    # Synchronously request state from target replica
-    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
-    {:noreply, state}
-  end
-
   def handle_info({:prepare, view_number, op_number, operation, _commit_number, sender_id}, state) do
     if view_number >= state.view_number do
       # Append to log if new operation
