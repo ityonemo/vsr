@@ -135,14 +135,14 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp get_impl({key}, from, state) do
+  defp get_impl({key}, _from, state) do
     case :ets.lookup(state.store, key) do
       [{^key, value}] -> {:reply, {:ok, value}, state}
       [] -> {:reply, {:error, :not_found}, state}
     end
   end
 
-  defp put_impl({key, value}, from, state) do
+  defp put_impl({key, value}, _from, state) do
     if state.replica_id == state.primary and state.status == :normal do
       client_request_impl({{:put, key, value}, :api_client, :erlang.unique_integer()}, state)
     else
@@ -150,7 +150,7 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp delete_impl({key}, from, state) do
+  defp delete_impl({key}, _from, state) do
     if state.replica_id == state.primary and state.status == :normal do
       client_request_impl({{:delete, key}, :api_client, :erlang.unique_integer()}, state)
     else
@@ -213,7 +213,7 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp prepare_ok_impl({view, op_num, replica_id}, state) do
+  defp prepare_ok_impl({view, op_num, _replica_id}, state) do
     if view == state.view_number and state.status == :normal and state.replica_id == state.primary do
       current_count = Map.get(state.prepare_ok_count, op_num, 0)
       new_count = current_count + 1
@@ -305,7 +305,7 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp unblock_impl({id}, state) do
+  defp unblock_impl({_id}, state) do
     # Only unblock if the id matches (for testing purposes)
     maybe_block_and_reply(state)
   end
