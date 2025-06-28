@@ -198,9 +198,19 @@ defmodule Vsr.Replica do
     new_log = state.log ++ [log_entry]
 
     # Apply operation immediately for single replica
+    IO.puts(
+      "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
+    )
+
     if MapSet.size(state.connected_replicas) == 0 do
       apply_operation(state, operation)
+      IO.puts("DEBUG: Single replica put - applied operation")
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
+
+      IO.puts(
+        "DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}"
+      )
+
       {:reply, :ok, new_state}
     else
       # Multi-replica: use full VSR protocol
@@ -234,9 +244,19 @@ defmodule Vsr.Replica do
     new_log = state.log ++ [log_entry]
 
     # Apply operation immediately for single replica
+    IO.puts(
+      "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
+    )
+
     if MapSet.size(state.connected_replicas) == 0 do
       apply_operation(state, operation)
+      IO.puts("DEBUG: Single replica put - applied operation")
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
+
+      IO.puts(
+        "DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}"
+      )
+
       {:reply, :ok, new_state}
     else
       # Multi-replica: use full VSR protocol
@@ -400,6 +420,7 @@ defmodule Vsr.Replica do
         Enum.each(state.log, fn {_v, op, operation, _sender_pid} ->
           if op <= new_commit_number and op > state.commit_number do
             apply_operation(state, operation)
+            IO.puts("DEBUG: Single replica put - applied operation")
           end
         end)
 
@@ -429,6 +450,7 @@ defmodule Vsr.Replica do
       Enum.each(state.log, fn {_v, op, operation, _sender_pid} ->
         if op <= msg.commit_number and op > state.commit_number do
           apply_operation(state, operation)
+          IO.puts("DEBUG: Single replica put - applied operation")
         end
       end)
 
@@ -581,6 +603,7 @@ defmodule Vsr.Replica do
 
         if op <= msg.commit_number do
           apply_operation(state, operation)
+          IO.puts("DEBUG: Single replica put - applied operation")
         end
       end)
 
@@ -624,6 +647,7 @@ defmodule Vsr.Replica do
 
       {_v, _op, operation, _sender_pid} ->
         apply_operation(state, operation)
+        IO.puts("DEBUG: Single replica put - applied operation")
     end
   end
 
