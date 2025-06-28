@@ -143,12 +143,82 @@ defmodule Vsr.Replica do
   end
 
   defp put_impl({key, value}, _from, state) do
-    if state.blocking do
-      receive do
-        {:unblock, _id} ->
-          :ets.insert(state.store, {key, value})
-          {:reply, :ok, state}
-      end
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp put_impl({key, value}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp put_impl({key, value}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp put_impl({key, value}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp put_impl({key, value}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp put_impl({key, value}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp put_impl({key, value}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:put, key, value}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
     else
       :ets.insert(state.store, {key, value})
       {:reply, :ok, state}
@@ -156,8 +226,48 @@ defmodule Vsr.Replica do
   end
 
   defp delete_impl({key}, _from, state) do
-    :ets.delete(state.store, key)
-    {:reply, :ok, state}
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.delete(state.store, key)
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:delete, key}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp delete_impl({key}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.delete(state.store, key)
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:delete, key}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp delete_impl({key}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.delete(state.store, key)
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:delete, key}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
+  end
+  defp delete_impl({key}, _from, state) do
+    # For single replica, apply directly
+    if length(state.configuration) == 1 do
+      :ets.delete(state.store, key)
+      {:reply, :ok, state}
+    else
+      # Use VSR protocol
+      client_request_impl({{:delete, key}, self(), :os.system_time(:microsecond)}, state)
+      {:reply, :ok, state}
+    end
   end
 
   # Sending replies back to clients
