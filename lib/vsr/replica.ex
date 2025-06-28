@@ -197,16 +197,13 @@ defmodule Vsr.Replica do
     log_entry = {state.view_number, new_op_number, operation, self()}
     new_log = state.log ++ [log_entry]
 
-    # Apply operation immediately for single replica
-      "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
-    )
+    # DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}
 
     if MapSet.size(state.connected_replicas) == 0 do
       apply_operation(state, operation)
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
 
-        "DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}"
-      )
+      # DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}
 
       {:reply, :ok, new_state}
     else
@@ -240,16 +237,13 @@ defmodule Vsr.Replica do
     log_entry = {state.view_number, new_op_number, operation, self()}
     new_log = state.log ++ [log_entry]
 
-    # Apply operation immediately for single replica
-      "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
-    )
+    # DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}
 
     if MapSet.size(state.connected_replicas) == 0 do
       apply_operation(state, operation)
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
 
-        "DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}"
-      )
+      # DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}
 
       {:reply, :ok, new_state}
     else
@@ -565,6 +559,7 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.GetState{} = msg, state) do
+    Logger.debug(
       "GetState: sender state - view=#{state.view_number}, op=#{state.op_number}, commit=#{state.commit_number}"
     )
 
@@ -581,12 +576,14 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.NewState{} = msg, state) do
+    Logger.debug(
       "NewState received: view=#{msg.view}, op=#{msg.op_number}, commit=#{msg.commit_number}, log_length=#{length(msg.log)}"
     )
 
     if msg.view >= state.view_number or msg.op_number > state.op_number do
       # Apply all committed operations from new state to our ETS store
       Enum.each(msg.log, fn {_v, op, operation, _sender_pid} ->
+        Logger.debug(
           "  Applying operation #{op}: #{inspect(operation)} (committed? #{op <= msg.commit_number})"
         )
 
