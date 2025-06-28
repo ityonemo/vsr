@@ -34,12 +34,4 @@ defprotocol Vsr.StateMachine do
   Used during state transfer from other replicas.
   """
   def set_state(state_machine, new_state)
-
-  @doc """
-  Creates a new state machine of the given implementation type.
-  This is a convenience function for creating state machines.
-  """
-  def new(implementation_module, opts) when is_atom(implementation_module) do
-    implementation_module.new(opts)
-  end
 end
