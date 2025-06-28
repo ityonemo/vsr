@@ -152,7 +152,18 @@ defmodule Vsr.Replica do
               prepare_ok_count: Map.put(state.prepare_ok_count, new_op_number, 1)
           }
 
-          # Check if we have majority immediately (single replica case)
+          {new_state_machine, result} = apply_and_get_result(new_state, new_op_number)
+          :ets.insert(state.client_table, {{client_id, request_id}, result})
+          send_client_reply(client_id, request_id, result)
+
+          new_state = %{
+            new_state
+            | commit_number: new_op_number,
+              state_machine: new_state_machine
+          }
+
+          {:noreply, new_state}
+          # For single replica or when we have no connected replicas, commit immediately
           if MapSet.size(state.connected_replicas) == 0 do
             # Single replica - commit immediately
             {new_state_machine, result} = apply_and_get_result(new_state, new_op_number)
