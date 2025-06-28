@@ -155,8 +155,16 @@ defmodule Vsr.Replica do
           # Check if we have majority immediately (single replica case)
           if MapSet.size(state.connected_replicas) == 0 do
             # Single replica - commit immediately
-            commit_operation(new_state, new_op_number)
-            new_state = %{new_state | commit_number: new_op_number}
+            {new_state_machine, result} = apply_and_get_result(new_state, new_op_number)
+            :ets.insert(state.client_table, {{client_id, request_id}, result})
+            send_client_reply(client_id, request_id, result)
+
+            new_state = %{
+              new_state
+              | commit_number: new_op_number,
+                state_machine: new_state_machine
+            }
+
             {:noreply, new_state}
           else
             {:noreply, new_state}
@@ -303,18 +311,17 @@ defmodule Vsr.Replica do
         # Majority received, commit operation and send commit messages
         new_commit_number = max(state.commit_number, msg.op_number)
 
-        # Apply all operations up to commit point
+        # Apply all operations up to commit point and send client replies
         log_entries = Log.get_all(state.log)
 
-        new_state_machine =
-          Enum.reduce(log_entries, state.state_machine, fn {_v, op, operation, _sender_pid}, sm ->
-            if op <= new_commit_number and op > state.commit_number do
-              {updated_sm, _result} = StateMachine.apply_operation(sm, operation)
-              updated_sm
-            else
-              sm
-            end
-          end)
+        {new_state_machine, _} =
+          apply_operations_and_send_replies(
+            log_entries,
+            state.state_machine,
+            state.commit_number,
+            new_commit_number,
+            state.client_table
+          )
 
         # Send commit messages to connected replicas
         commit_message = %Messages.Commit{
@@ -343,18 +350,17 @@ defmodule Vsr.Replica do
 
   def handle_info(%Messages.Commit{} = msg, state) do
     if msg.view == state.view_number and msg.commit_number > state.commit_number do
-      # Apply all operations up to commit point
+      # Apply all operations up to commit point and send client replies
       log_entries = Log.get_all(state.log)
 
-      new_state_machine =
-        Enum.reduce(log_entries, state.state_machine, fn {_v, op, operation, _sender_pid}, sm ->
-          if op <= msg.commit_number and op > state.commit_number do
-            {updated_sm, _result} = StateMachine.apply_operation(sm, operation)
-            updated_sm
-          else
-            sm
-          end
-        end)
+      {new_state_machine, _} =
+        apply_operations_and_send_replies(
+          log_entries,
+          state.state_machine,
+          state.commit_number,
+          new_commit_number,
+          state.client_table
+        )
 
       new_state = %{state | commit_number: msg.commit_number, state_machine: new_state_machine}
       {:noreply, new_state}
