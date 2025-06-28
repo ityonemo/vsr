@@ -41,7 +41,7 @@ defmodule Vsr.Replica do
 
     store = :ets.new(:store, [:set, :private])
     client_table = :ets.new(:client_table, [:set, :private])
-    log = EtsLog.new()
+    log = EtsLog.new(nil)
 
     state = %__MODULE__{
       view_number: 0,
@@ -481,7 +481,7 @@ defmodule Vsr.Replica do
   def handle_info(%Messages.DoViewChange{} = msg, state) do
     if msg.view >= state.view_number do
       # Replacement for primary. Here, start view and set new state
-      new_log = EtsLog.new() |> Log.replace(msg.log)
+      new_log = EtsLog.new(nil) |> Log.replace(msg.log)
 
       new_state = %{
         state
@@ -514,7 +514,7 @@ defmodule Vsr.Replica do
 
   def handle_info(%Messages.StartView{} = msg, state) do
     if msg.view >= state.view_number do
-      new_log = EtsLog.new() |> Log.replace(msg.log)
+      new_log = EtsLog.new(nil) |> Log.replace(msg.log)
 
       new_state = %{
         state
@@ -586,7 +586,7 @@ defmodule Vsr.Replica do
       end)
 
       # Replace our log with the new log
-      new_log = EtsLog.new() |> Log.replace(msg.log)
+      new_log = EtsLog.new(nil) |> Log.replace(msg.log)
 
       new_state = %{
         state
