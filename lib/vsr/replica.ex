@@ -230,13 +230,13 @@ defmodule Vsr.Replica do
         op_number > length(state.log) ->
           new_log = state.log ++ [{view_number, op_number, operation, sender_id}]
           new_state = %{state | log: new_log, op_number: op_number}
-          send(sender_id, {:prepare_ok, view_number, op_number, state.replica_id})
+          send_to_replica(sender_id, {:prepare_ok, view_number, op_number, state.replica_id})
 
           {:noreply, new_state}
 
         op_number <= length(state.log) ->
           # Already have operation, just send ok
-          send(sender_id, {:prepare_ok, view_number, op_number, state.replica_id})
+          send_to_replica(sender_id, {:prepare_ok, view_number, op_number, state.replica_id})
 
           {:noreply, state}
       end
@@ -359,6 +359,11 @@ defmodule Vsr.Replica do
     else
       {:noreply, state}
     end
+  end
+
+  def handle_info({:start_view_change_ack, _new_view_number, _replica_id}, state) do
+    # Handle view change acknowledgment\
+    {:noreply, state}
   end
 
   def handle_info({:view_change_ok, new_view_number, replica_id}, state) do
