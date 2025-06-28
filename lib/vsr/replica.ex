@@ -198,7 +198,6 @@ defmodule Vsr.Replica do
     new_log = state.log ++ [log_entry]
 
     # Apply operation immediately for single replica
-    IO.puts(
       "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
     )
 
@@ -206,7 +205,6 @@ defmodule Vsr.Replica do
       apply_operation(state, operation)
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
 
-      IO.puts(
         "DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}"
       )
 
@@ -243,7 +241,6 @@ defmodule Vsr.Replica do
     new_log = state.log ++ [log_entry]
 
     # Apply operation immediately for single replica
-    IO.puts(
       "DEBUG: Single replica put - before: op=#{state.op_number}, commit=#{state.commit_number}"
     )
 
@@ -251,7 +248,6 @@ defmodule Vsr.Replica do
       apply_operation(state, operation)
       new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
 
-      IO.puts(
         "DEBUG: Single replica put - after: op=#{new_state.op_number}, commit=#{new_state.commit_number}"
       )
 
@@ -569,7 +565,6 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.GetState{} = msg, state) do
-    IO.puts(
       "GetState: sender state - view=#{state.view_number}, op=#{state.op_number}, commit=#{state.commit_number}"
     )
 
@@ -586,14 +581,12 @@ defmodule Vsr.Replica do
   end
 
   def handle_info(%Messages.NewState{} = msg, state) do
-    IO.puts(
       "NewState received: view=#{msg.view}, op=#{msg.op_number}, commit=#{msg.commit_number}, log_length=#{length(msg.log)}"
     )
 
     if msg.view >= state.view_number or msg.op_number > state.op_number do
       # Apply all committed operations from new state to our ETS store
       Enum.each(msg.log, fn {_v, op, operation, _sender_pid} ->
-        IO.puts(
           "  Applying operation #{op}: #{inspect(operation)} (committed? #{op <= msg.commit_number})"
         )
 
