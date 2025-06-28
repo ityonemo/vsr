@@ -1,48 +1,45 @@
 defprotocol Vsr.StateMachine do
   @moduledoc """
-  Protocol for abstract state machine operations in VSR.
+  Protocol for pluggable state machines in VSR replicas.
 
-  This protocol allows different state machine implementations to be used
-  with the VSR consensus algorithm, enabling flexibility for various
-  application domains (key-value stores, databases, file systems, etc.).
+  This protocol allows different state machine implementations to be
+  used with VSR replicas, making the consensus algorithm truly modular.
+  The state machine handles the actual business logic operations while
+  VSR handles the distributed consensus.
   """
-
-  @type operation :: term()
-  @type state :: term()
-  @type result :: term()
 
   @doc """
-  Apply an operation to the state machine.
-
-  Returns the updated state machine and the operation result.
-  The result can be used for client replies.
+  Creates a new state machine instance with the given options.
   """
-  @spec apply_operation(state_machine :: t(), operation()) :: {t(), result()}
+  def new(state_machine, opts \\ [])
+
+  @doc """
+  Applies an operation to the state machine and returns the new state
+  and the operation result.
+
+  Returns `{new_state_machine, result}` where:
+  - `new_state_machine` is the updated state machine
+  - `result` is the operation result to return to the client
+  """
   def apply_operation(state_machine, operation)
 
   @doc """
-  Get the current state of the state machine.
-
-  Used during state transfer to serialize the current state.
-  Returns the internal state that can be used with set_state/2.
+  Gets the current state of the state machine.
+  Used for state transfer between replicas.
   """
-  @spec get_state(state_machine :: t()) :: state()
   def get_state(state_machine)
 
   @doc """
-  Set the state of the state machine.
-
-  Used during state transfer to restore state from another replica.
-  The state should be in the same format returned by get_state/1.
+  Sets the state machine to a specific state.
+  Used during state transfer from other replicas.
   """
-  @spec set_state(state_machine :: t(), state()) :: t()
-  def set_state(state_machine, state)
+  def set_state(state_machine, new_state)
 
   @doc """
-  Create a new instance of the state machine.
-
-  Used during replica initialization to create a fresh state machine.
+  Creates a new state machine of the given implementation type.
+  This is a convenience function for creating state machines.
   """
-  @spec new(opts :: keyword()) :: t()
-  def new(opts \\ [])
+  def new(implementation_module, opts) when is_atom(implementation_module) do
+    implementation_module.new(opts)
+  end
 end
