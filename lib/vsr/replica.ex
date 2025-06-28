@@ -176,6 +176,47 @@ defmodule Vsr.Replica do
     end
   end
 
+  # Helper to apply a specific operation and get its result
+  defp apply_and_get_result(state, op_number) do
+    case Log.get(state.log, op_number) do
+      {:ok, {_v, _op, operation, _sender_pid}} ->
+        StateMachine.apply_operation(state.state_machine, operation)
+
+      {:error, :not_found} ->
+        {state.state_machine, {:error, :operation_not_found}}
+    end
+  end
+
+  # Helper to apply operations and send client replies for a range
+  defp apply_operations_and_send_replies(
+         log_entries,
+         state_machine,
+         old_commit_number,
+         new_commit_number,
+         client_table
+       ) do
+    operations_to_commit =
+      Enum.filter(log_entries, fn {_v, op_num, _operation, _sender_pid} ->
+        op_num > old_commit_number and op_num <= new_commit_number
+      end)
+
+    # Apply operations and collect results
+    {final_state_machine, _results} =
+      Enum.reduce(operations_to_commit, {state_machine, []}, fn {_v, op_num, operation,
+                                                                 _sender_pid},
+                                                                {sm, results} ->
+        {updated_sm, result} = StateMachine.apply_operation(sm, operation)
+
+        # Store result in client table for any pending client requests
+        # Note: We don't have client_id/request_id here, but operations are applied
+        # This is for the commit phase where we just apply operations
+
+        {updated_sm, [result | results]}
+      end)
+
+    {final_state_machine, Enum.reverse(_results)}
+  end
+
   # Sending replies back to clients
   defp send_client_reply(client_id, request_id, result) do
     reply = %Messages.ClientReply{request_id: request_id, result: result}
@@ -358,7 +399,7 @@ defmodule Vsr.Replica do
           log_entries,
           state.state_machine,
           state.commit_number,
-          new_commit_number,
+          msg.commit_number,
           state.client_table
         )
 
