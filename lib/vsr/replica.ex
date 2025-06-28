@@ -273,9 +273,8 @@ defmodule Vsr.Replica do
   end
 
   def handle_cast({:get_state, target_replica}, state) do
+    # Synchronously request state from target replica
     send(target_replica, {:get_state, state.view_number, state.op_number, self()})
-    # Also request immediate state response
-    # Wait for response
     {:noreply, state}
   end
 
