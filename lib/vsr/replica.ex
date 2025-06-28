@@ -184,8 +184,14 @@ defmodule Vsr.Replica do
       {:reply, :ok, new_state}
     else
       # Multi-replica: use full VSR protocol
-      client_request_impl({operation, self(), :os.system_time(:microsecond)}, state)
-      {:reply, :ok, state}
+      case client_request_impl({operation, self(), :os.system_time(:microsecond)}, %{
+             state
+             | op_number: new_op_number,
+               log: new_log
+           }) do
+        {:noreply, new_state} -> {:reply, :ok, new_state}
+        other -> other
+      end
     end
   end
 
@@ -218,8 +224,14 @@ defmodule Vsr.Replica do
       {:reply, :ok, new_state}
     else
       # Multi-replica: use full VSR protocol
-      client_request_impl({operation, self(), :os.system_time(:microsecond)}, state)
-      {:reply, :ok, state}
+      case client_request_impl({operation, self(), :os.system_time(:microsecond)}, %{
+             state
+             | op_number: new_op_number,
+               log: new_log
+           }) do
+        {:noreply, new_state} -> {:reply, :ok, new_state}
+        other -> other
+      end
     end
   end
 
