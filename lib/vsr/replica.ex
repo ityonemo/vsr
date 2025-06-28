@@ -142,20 +142,6 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp put_impl({key, value}, _from, state) do
-    # For single replica or direct API calls, execute immediately
-    :ets.insert(state.store, {key, value})
-    # Always return ok for put operations
-    {:reply, :ok, state}
-  end
-
-  defp delete_impl({key}, _from, state) do
-    # For single replica or direct API calls, execute immediately
-    :ets.delete(state.store, key)
-    # Always return ok for delete operations
-    {:reply, :ok, state}
-  end
-
   defp start_view_change_impl(_payload, state) do
     new_view = state.view_number + 1
 
