@@ -208,9 +208,12 @@ defmodule Vsr.Replica do
   end
 
   def handle_cast({:start_view_change}, state) do
+    new_view_number = state.view_number + 1
+
     state = %{
       state
-      | status: :view_change,
+      | view_number: new_view_number,
+        status: :view_change,
         view_change_votes: Map.put(state.view_change_votes, state.replica_id, true)
     }
 
