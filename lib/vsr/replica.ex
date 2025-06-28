@@ -278,6 +278,30 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
+  def handle_cast({:get_state, target_replica}, state) do
+    # Synchronously request state from target replica
+    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
+    {:noreply, state}
+  end
+
+  def handle_cast({:get_state, target_replica}, state) do
+    # Synchronously request state from target replica
+    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
+    {:noreply, state}
+  end
+
+  def handle_cast({:get_state, target_replica}, state) do
+    # Synchronously request state from target replica
+    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
+    {:noreply, state}
+  end
+
+  def handle_cast({:get_state, target_replica}, state) do
+    # Synchronously request state from target replica
+    send(target_replica, {:get_state, state.view_number, state.op_number, self()})
+    {:noreply, state}
+  end
+
   def handle_info({:prepare, view_number, op_number, operation, _commit_number, sender_id}, state) do
     if view_number >= state.view_number do
       # Append to log if new operation
@@ -466,7 +490,7 @@ defmodule Vsr.Replica do
   end
 
   def handle_info({:new_state, new_view_number, log, op_number, commit_number}, state) do
-    if new_view_number >= state.view_number do
+    if new_view_number >= state.view_number or op_number > state.op_number do
       # Apply all operations from new state
       Enum.each(log, fn {_v, op, operation, _sender_id} ->
         if op <= commit_number do
