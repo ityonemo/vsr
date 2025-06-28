@@ -2,6 +2,7 @@ defmodule Vsr.ReplicaTest do
   use ExUnit.Case, async: false
   alias Vsr.Replica
   alias Vsr.Messages
+  alias Vsr.KV
 
   describe "replica initialization" do
     test "starts with correct initial state" do
@@ -105,26 +106,28 @@ defmodule Vsr.ReplicaTest do
   describe "key-value operations" do
     setup do
       {:ok, replica} = Replica.start_link(configuration: [], name: nil)
-      %{replica: replica}
+      kv = KV.new(replica_pid: replica)
+      %{kv: kv}
     end
 
-    test "put and get operations", %{replica: replica} do
-      assert Replica.put(replica, "key1", "value1") == :ok
-      assert Replica.get(replica, "key1") == {:ok, "value1"}
-      assert Replica.get(replica, "nonexistent") == {:error, :not_found}
+    test "put and get operations", %{kv: kv} do
+      assert KV.put(kv, "key1", "value1") == :ok
+      assert KV.get(kv, "key1") == {:ok, "value1"}
+      assert KV.get(kv, "nonexistent") == {:error, :not_found}
     end
 
-    test "delete operation", %{replica: replica} do
-      Replica.put(replica, "key1", "value1")
-      assert Replica.delete(replica, "key1") == :ok
-      assert Replica.get(replica, "key1") == {:error, :not_found}
+    test "delete operation", %{kv: kv} do
+      KV.put(kv, "key1", "value1")
+      assert KV.delete(kv, "key1") == :ok
+      assert KV.get(kv, "key1") == {:error, :not_found}
     end
 
-    test "operations are logged correctly", %{replica: replica} do
-      Replica.put(replica, "key1", "value1")
-      Replica.put(replica, "key2", "value2")
-      Replica.delete(replica, "key1")
+    test "operations are logged correctly", %{kv: kv} do
+      KV.put(kv, "key1", "value1")
+      KV.put(kv, "key2", "value2")
+      KV.delete(kv, "key1")
 
+      replica = KV.replica_pid(kv)
       state = Replica.dump(replica)
       assert length(state.log) == 3
       assert state.op_number == 3
@@ -136,10 +139,12 @@ defmodule Vsr.ReplicaTest do
       {:ok, replica} =
         Replica.start_link(configuration: [], blocking: true, name: nil)
 
+      kv = KV.new(replica_pid: replica)
+
       # Start async operation that should block
       task =
         Task.async(fn ->
-          Replica.put(replica, "key1", "value1")
+          KV.put(kv, "key1", "value1")
         end)
 
       # Operation should not complete immediately
@@ -160,9 +165,11 @@ defmodule Vsr.ReplicaTest do
       {:ok, replica1} = Replica.start_link(configuration: [], name: nil)
       {:ok, replica2} = Replica.start_link(configuration: [], name: nil)
 
+      kv1 = KV.new(replica_pid: replica1)
+
       # Add some operations to replica1 (as a single replica)
-      Replica.put(replica1, "key1", "value1")
-      Replica.put(replica1, "key2", "value2")
+      KV.put(kv1, "key1", "value1")
+      KV.put(kv1, "key2", "value2")
 
       # Simulate replica2 falling behind and requesting state using new struct format
       get_state_msg = %Messages.GetState{
@@ -178,8 +185,10 @@ defmodule Vsr.ReplicaTest do
       # Check that replica2 caught up
       replica2_state = Replica.dump(replica2)
       assert replica2_state.op_number >= 2
-      assert Replica.get(replica2, "key1") == {:ok, "value1"}
-      assert Replica.get(replica2, "key2") == {:ok, "value2"}
+
+      kv2 = KV.new(replica_pid: replica2)
+      assert KV.get(kv2, "key1") == {:ok, "value1"}
+      assert KV.get(kv2, "key2") == {:ok, "value2"}
     end
   end
 end
