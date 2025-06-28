@@ -4,6 +4,8 @@ defmodule Vsr.Replica do
   alias Vsr.Messages
   alias Vsr.Log
   alias Vsr.EtsLog
+  alias Vsr.StateMachine
+  alias Vsr.KV
 
   # Section 0: State
   defstruct [
@@ -16,7 +18,7 @@ defmodule Vsr.Replica do
     :total_quorum_number,
     :connected_replicas,
     :primary,
-    :store,
+    :state_machine,
     :blocking,
     :client_table,
     :prepare_ok_count,
@@ -29,19 +31,25 @@ defmodule Vsr.Replica do
     configuration = Keyword.fetch!(opts, :configuration)
     total_quorum_number = Keyword.get(opts, :total_quorum_number, length(configuration))
     blocking = Keyword.get(opts, :blocking, false)
+    state_machine_impl = Keyword.get(opts, :state_machine, KV)
     name = Keyword.get(opts, :name)
 
     start_opts = if name, do: [name: name], else: []
-    GenServer.start_link(__MODULE__, {configuration, total_quorum_number, blocking}, start_opts)
+
+    GenServer.start_link(
+      __MODULE__,
+      {configuration, total_quorum_number, blocking, state_machine_impl},
+      start_opts
+    )
   end
 
-  def init({configuration, total_quorum_number, blocking}) do
+  def init({configuration, total_quorum_number, blocking, state_machine_impl}) do
     # Monitor other replicas
     Process.flag(:trap_exit, true)
 
-    store = :ets.new(:store, [:set, :private])
     client_table = :ets.new(:client_table, [:set, :private])
     log = EtsLog.new(nil)
+    state_machine = StateMachine.new(state_machine_impl, [])
 
     state = %__MODULE__{
       view_number: 0,
@@ -53,7 +61,7 @@ defmodule Vsr.Replica do
       total_quorum_number: total_quorum_number,
       connected_replicas: MapSet.new(),
       primary: primary_for_view(0, configuration),
-      store: store,
+      state_machine: state_machine,
       blocking: blocking,
       client_table: client_table,
       prepare_ok_count: %{},
@@ -176,10 +184,10 @@ defmodule Vsr.Replica do
   end
 
   defp get_impl({key}, _from, state) do
-    case :ets.lookup(state.store, key) do
-      [{^key, value}] -> {:reply, {:ok, value}, state}
-      [] -> {:reply, {:error, :not_found}, state}
-    end
+    {_updated_state_machine, result} =
+      StateMachine.apply_operation(state.state_machine, {:get, key})
+
+    {:reply, result, state}
   end
 
   defp put_impl({key, value}, from, state) do
@@ -202,8 +210,15 @@ defmodule Vsr.Replica do
     new_log = Log.append(state.log, state.view_number, new_op_number, operation, self())
 
     if MapSet.size(state.connected_replicas) == 0 do
-      apply_operation(state, operation)
-      new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
+      {new_state_machine, _result} = StateMachine.apply_operation(state.state_machine, operation)
+
+      new_state = %{
+        state
+        | op_number: new_op_number,
+          log: new_log,
+          commit_number: new_op_number,
+          state_machine: new_state_machine
+      }
 
       {:reply, :ok, new_state}
     else
@@ -237,8 +252,15 @@ defmodule Vsr.Replica do
     new_log = Log.append(state.log, state.view_number, new_op_number, operation, self())
 
     if MapSet.size(state.connected_replicas) == 0 do
-      apply_operation(state, operation)
-      new_state = %{state | op_number: new_op_number, log: new_log, commit_number: new_op_number}
+      {new_state_machine, _result} = StateMachine.apply_operation(state.state_machine, operation)
+
+      new_state = %{
+        state
+        | op_number: new_op_number,
+          log: new_log,
+          commit_number: new_op_number,
+          state_machine: new_state_machine
+      }
 
       {:reply, :ok, new_state}
     else
@@ -402,11 +424,15 @@ defmodule Vsr.Replica do
         # Apply all operations up to commit point
         log_entries = Log.get_all(state.log)
 
-        Enum.each(log_entries, fn {_v, op, operation, _sender_pid} ->
-          if op <= new_commit_number and op > state.commit_number do
-            apply_operation(state, operation)
-          end
-        end)
+        new_state_machine =
+          Enum.reduce(log_entries, state.state_machine, fn {_v, op, operation, _sender_pid}, sm ->
+            if op <= new_commit_number and op > state.commit_number do
+              {updated_sm, _result} = StateMachine.apply_operation(sm, operation)
+              updated_sm
+            else
+              sm
+            end
+          end)
 
         # Send commit messages to connected replicas
         commit_message = %Messages.Commit{
@@ -419,7 +445,12 @@ defmodule Vsr.Replica do
         end
 
         {:noreply,
-         %{state | commit_number: new_commit_number, prepare_ok_count: new_prepare_ok_count}}
+         %{
+           state
+           | commit_number: new_commit_number,
+             prepare_ok_count: new_prepare_ok_count,
+             state_machine: new_state_machine
+         }}
       else
         {:noreply, %{state | prepare_ok_count: new_prepare_ok_count}}
       end
@@ -433,13 +464,17 @@ defmodule Vsr.Replica do
       # Apply all operations up to commit point
       log_entries = Log.get_all(state.log)
 
-      Enum.each(log_entries, fn {_v, op, operation, _sender_pid} ->
-        if op <= msg.commit_number and op > state.commit_number do
-          apply_operation(state, operation)
-        end
-      end)
+      new_state_machine =
+        Enum.reduce(log_entries, state.state_machine, fn {_v, op, operation, _sender_pid}, sm ->
+          if op <= msg.commit_number and op > state.commit_number do
+            {updated_sm, _result} = StateMachine.apply_operation(sm, operation)
+            updated_sm
+          else
+            sm
+          end
+        end)
 
-      new_state = %{state | commit_number: msg.commit_number}
+      new_state = %{state | commit_number: msg.commit_number, state_machine: new_state_machine}
       {:noreply, new_state}
     else
       {:noreply, state}
@@ -564,12 +599,14 @@ defmodule Vsr.Replica do
   def handle_info(%Messages.GetState{} = msg, state) do
     # Always send state regardless of view number
     log_entries = Log.get_all(state.log)
+    state_machine_state = StateMachine.get_state(state.state_machine)
 
     new_state_msg = %Messages.NewState{
       view: state.view_number,
       log: log_entries,
       op_number: state.op_number,
-      commit_number: state.commit_number
+      commit_number: state.commit_number,
+      state_machine_state: state_machine_state
     }
 
     Messages.vsr_send(msg.sender, new_state_msg)
@@ -578,15 +615,11 @@ defmodule Vsr.Replica do
 
   def handle_info(%Messages.NewState{} = msg, state) do
     if msg.view >= state.view_number or msg.op_number > state.op_number do
-      # Apply all committed operations from new state to our ETS store
-      Enum.each(msg.log, fn {_v, op, operation, _sender_pid} ->
-        if op <= msg.commit_number do
-          apply_operation(state, operation)
-        end
-      end)
-
       # Replace our log with the new log
       new_log = EtsLog.new(nil) |> Log.replace(msg.log)
+
+      # Replace state machine state
+      new_state_machine = StateMachine.set_state(state.state_machine, msg.state_machine_state)
 
       new_state = %{
         state
@@ -594,7 +627,8 @@ defmodule Vsr.Replica do
           log: new_log,
           op_number: msg.op_number,
           commit_number: msg.commit_number,
-          status: :normal
+          status: :normal,
+          state_machine: new_state_machine
       }
 
       {:noreply, new_state}
@@ -625,21 +659,10 @@ defmodule Vsr.Replica do
         :ok
 
       {:ok, {_v, _op, operation, _sender_pid}} ->
-        apply_operation(state, operation)
+        {_updated_state_machine, _result} =
+          StateMachine.apply_operation(state.state_machine, operation)
     end
   end
-
-  defp apply_operation(state, {:put, key, value}) do
-    :ets.insert(state.store, {key, value})
-    state
-  end
-
-  defp apply_operation(state, {:delete, key}) do
-    :ets.delete(state.store, key)
-    state
-  end
-
-  defp apply_operation(state, _operation), do: state
 
   defp count_true(map) do
     Enum.count(map, fn {_k, v} -> v end)
