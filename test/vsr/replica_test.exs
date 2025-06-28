@@ -1,6 +1,7 @@
 defmodule Vsr.ReplicaTest do
   use ExUnit.Case, async: false
   alias Vsr.Replica
+  alias Vsr.Messages
 
   describe "replica initialization" do
     test "starts with correct initial state" do
@@ -122,8 +123,16 @@ defmodule Vsr.ReplicaTest do
     } do
       operation = {:put, "key1", "value1"}
 
-      # Send prepare message to backup
-      send(backup, {:prepare, 0, 1, operation, 0, primary})
+      # Send prepare message to backup using new struct format
+      prepare_msg = %Messages.Prepare{
+        view: 0,
+        op_number: 1,
+        operation: operation,
+        commit_number: 0,
+        sender: primary
+      }
+
+      send(backup, prepare_msg)
 
       Process.sleep(10)
 
@@ -135,9 +144,22 @@ defmodule Vsr.ReplicaTest do
     test "commits operation on commit message", %{backup: backup, primary: primary} do
       operation = {:put, "key1", "value1"}
 
-      # Send prepare then commit
-      send(backup, {:prepare, 0, 1, operation, 0, primary})
-      send(backup, {:commit, 0, 1})
+      # Send prepare then commit using new struct format
+      prepare_msg = %Messages.Prepare{
+        view: 0,
+        op_number: 1,
+        operation: operation,
+        commit_number: 0,
+        sender: primary
+      }
+
+      commit_msg = %Messages.Commit{
+        view: 0,
+        commit_number: 1
+      }
+
+      send(backup, prepare_msg)
+      send(backup, commit_msg)
 
       Process.sleep(10)
 
@@ -188,9 +210,14 @@ defmodule Vsr.ReplicaTest do
       # Start view change from replica2
       Replica.start_view_change(replica2)
 
-      # Send start-view-change messages
-      send(replica1, {:start_view_change, 1, replica2})
-      send(replica3, {:start_view_change, 1, replica2})
+      # Send start-view-change messages using new struct format
+      start_view_change_msg = %Messages.StartViewChange{
+        view: 1,
+        sender: replica2
+      }
+
+      send(replica1, start_view_change_msg)
+      send(replica3, start_view_change_msg)
 
       # Allow view change to complete
       Process.sleep(100)
@@ -247,8 +274,9 @@ defmodule Vsr.ReplicaTest do
       # Operation should not complete immediately
       refute Task.yield(task, 50)
 
-      # Unblock the replica
-      send(replica, {:unblock, 1})
+      # Unblock the replica using new struct format
+      unblock_msg = %Messages.Unblock{id: 1}
+      send(replica, unblock_msg)
 
       # Now operation should complete
       assert Task.await(task, 100) == :ok
@@ -272,9 +300,14 @@ defmodule Vsr.ReplicaTest do
       Replica.put(replica1, "key1", "value1")
       Replica.put(replica1, "key2", "value2")
 
-      # Simulate replica2 falling behind and requesting state
-      # Request state from replica1
-      send(replica1, {:get_state, 0, 0, replica2})
+      # Simulate replica2 falling behind and requesting state using new struct format
+      get_state_msg = %Messages.GetState{
+        view: 0,
+        op_number: 0,
+        sender: replica2
+      }
+
+      send(replica1, get_state_msg)
 
       Process.sleep(200)
 
