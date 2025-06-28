@@ -31,7 +31,7 @@ defmodule Vsr.Replica do
     configuration = Keyword.fetch!(opts, :configuration)
     total_quorum_number = Keyword.get(opts, :total_quorum_number, length(configuration))
     blocking = Keyword.get(opts, :blocking, false)
-    state_machine_impl = Keyword.get(opts, :state_machine, KV)
+    state_machine_impl = Keyword.get(opts, :state_machine, Vsr.KVStateMachine)
     name = Keyword.get(opts, :name)
 
     start_opts = if name, do: [name: name], else: []
