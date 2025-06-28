@@ -345,7 +345,7 @@ defmodule Vsr.Replica do
       connected_count = MapSet.size(state.connected_replicas) + 1
 
       # Check if we have majority
-      if current_count > div(connected_count, 2) then
+      if current_count > div(connected_count, 2) do
         # Majority received, commit operation and send commit messages
         new_commit_number = max(state.commit_number, msg.op_number)
 
