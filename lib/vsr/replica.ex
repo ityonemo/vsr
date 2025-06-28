@@ -490,6 +490,10 @@ defmodule Vsr.Replica do
     end
   end
 
+  def handle_info({:request_state_from, target_replica}, state) do\
+    send(target_replica, {:get_state, state.view_number, state.op_number, self()})\
+    {:noreply, state}\
+  end
   def handle_info({:unblock, _}, state) do
     # This message is handled by the blocking receive in put_impl/delete_impl
     {:noreply, state}
