@@ -3,8 +3,7 @@ defmodule Vsr.Application do
 
   def start(_type, _args) do
     children = [
-      # Start the Registry for our replicas
-      {Registry, keys: :unique, name: Vsr.Registry}
+      # No need for Registry since we use PIDs directly
     ]
 
     opts = [strategy: :one_for_one, name: Vsr.Supervisor]
