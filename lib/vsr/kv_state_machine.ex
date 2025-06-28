@@ -1,7 +1,7 @@
 defmodule Vsr.KVStateMachine do
   @moduledoc """
   Key-Value state machine implementation for VSR replicas.
-  
+
   This module implements the StateMachine protocol and provides
   the actual state management for key-value operations within
   a VSR replica.
@@ -42,8 +42,7 @@ defmodule Vsr.KVStateMachine do
     end
 
     def set_state(state_machine, new_data) do
-      %{state_machine |}
+      %{state_machine | data: new_data}
     end
   end
 end
-
