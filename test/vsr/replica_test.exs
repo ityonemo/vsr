@@ -272,8 +272,8 @@ defmodule Vsr.ReplicaTest do
       Replica.put(replica1, "key1", "value1")
       Replica.put(replica1, "key2", "value2")
 
-      # Simulate replica2 falling behind and requesting state directly
-      send(replica2, {:get_state, 0, 0, replica1})
+      # Simulate replica2 falling behind and requesting state
+      # Request state from replica1
       send(replica1, {:get_state, 0, 0, replica2})
 
       Process.sleep(200)
