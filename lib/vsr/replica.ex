@@ -309,9 +309,9 @@ defmodule Vsr.Replica do
         new_commit_number = max(state.commit_number, op_number)
 
         # Apply all operations up to commit point
-        Enum.each(state.log, fn {_v, op, _op_data, _cid, _reqid} ->
+        Enum.each(state.log, fn {_v, op, operation, _client_id} ->
           if op <= new_commit_number and op > state.commit_number do
-            commit_operation(state, op)
+            apply_operation(state, operation)
           end
         end)
 
@@ -335,9 +335,9 @@ defmodule Vsr.Replica do
   def handle_info({:commit, view_number, commit_number}, state) do
     if view_number == state.view_number and commit_number > state.commit_number do
       # Apply all operations up to commit point
-      Enum.each(state.log, fn {_v, op, _op_data, _cid, _reqid} ->
+      Enum.each(state.log, fn {_v, op, operation, _client_id} ->
         if op <= commit_number and op > state.commit_number do
-          commit_operation(state, op)
+          apply_operation(state, operation)
         end
       end)
 
