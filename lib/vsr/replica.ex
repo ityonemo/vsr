@@ -4,7 +4,6 @@ defmodule Vsr.Replica do
 
   # Section 0: State
   defstruct [
-    :replica_id,
     :view_number,
     :status,
     :op_number,
@@ -24,18 +23,16 @@ defmodule Vsr.Replica do
 
   # Section 1: Initialization
   def start_link(opts) do
-    replica_id = Keyword.fetch!(opts, :replica_id)
-    _name = Keyword.get(opts, :name, via_tuple(replica_id))
     configuration = Keyword.fetch!(opts, :configuration)
     total_quorum_number = Keyword.get(opts, :total_quorum_number, length(configuration))
     blocking = Keyword.get(opts, :blocking, false)
+    name = Keyword.get(opts, :name)
 
-    GenServer.start_link(__MODULE__, {replica_id, configuration, total_quorum_number, blocking},
-      name: via_tuple(replica_id)
-    )
+    start_opts = if name, do: [name: name], else: []
+    GenServer.start_link(__MODULE__, {configuration, total_quorum_number, blocking}, start_opts)
   end
 
-  def init({replica_id, configuration, total_quorum_number, blocking}) do
+  def init({configuration, total_quorum_number, blocking}) do
     # Monitor other replicas
     Process.flag(:trap_exit, true)
 
@@ -43,7 +40,6 @@ defmodule Vsr.Replica do
     client_table = :ets.new(:client_table, [:set, :private])
 
     state = %__MODULE__{
-      replica_id: replica_id,
       view_number: 0,
       status: :normal,
       op_number: 0,
@@ -123,7 +119,7 @@ defmodule Vsr.Replica do
   end
 
   defp client_request_impl({operation, client_id, request_id}, state) do
-    if state.replica_id == state.primary and state.status == :normal do
+    if self() == state.primary and state.status == :normal do
       # Check if this request was already processed
       case :ets.lookup(state.client_table, {client_id, request_id}) do
         [{_, result}] ->
@@ -134,13 +130,12 @@ defmodule Vsr.Replica do
         [] ->
           # New request, process it
           new_op_number = state.op_number + 1
-          log_entry = {state.view_number, new_op_number, operation, state.replica_id}
+          log_entry = {state.view_number, new_op_number, operation, self()}
           new_log = state.log ++ [log_entry]
 
           # Send prepare messages to all connected backups
           prepare_message =
-            {:prepare, state.view_number, new_op_number, operation, state.commit_number,
-             state.replica_id}
+            {:prepare, state.view_number, new_op_number, operation, state.commit_number, self()}
 
           for {replica_pid, _ref} <- state.connected_replicas do
             send(replica_pid, prepare_message)
@@ -193,7 +188,7 @@ defmodule Vsr.Replica do
     operation = {:put, key, value}
     new_op_number = state.op_number + 1
 
-    log_entry = {state.view_number, new_op_number, operation, state.replica_id}
+    log_entry = {state.view_number, new_op_number, operation, self()}
     new_log = state.log ++ [log_entry]
 
     # Apply operation immediately for single replica
@@ -229,7 +224,7 @@ defmodule Vsr.Replica do
     operation = {:delete, key}
     new_op_number = state.op_number + 1
 
-    log_entry = {state.view_number, new_op_number, operation, state.replica_id}
+    log_entry = {state.view_number, new_op_number, operation, self()}
     new_log = state.log ++ [log_entry]
 
     # Apply operation immediately for single replica
@@ -284,7 +279,7 @@ defmodule Vsr.Replica do
 
     # Send start view change to all connected replicas
     for {replica_pid, _ref} <- state.connected_replicas do
-      send(replica_pid, {:start_view_change, new_view_number, state.replica_id})
+      send(replica_pid, {:start_view_change, new_view_number, self()})
     end
 
     new_state = %{
@@ -292,7 +287,7 @@ defmodule Vsr.Replica do
       | view_number: new_view_number,
         status: :view_change,
         primary: primary_for_view(new_view_number, state.configuration),
-        view_change_votes: Map.put(state.view_change_votes, state.replica_id, true)
+        view_change_votes: Map.put(state.view_change_votes, self(), true)
     }
 
     {:noreply, new_state}
@@ -325,34 +320,25 @@ defmodule Vsr.Replica do
     {:noreply, new_state}
   end
 
-  def handle_info({:prepare, view_number, op_number, operation, _commit_number, sender_id}, state) do
+  def handle_info(
+        {:prepare, view_number, op_number, operation, _commit_number, sender_pid},
+        state
+      ) do
     if view_number >= state.view_number do
       # Append to log if new operation
       cond do
         op_number > length(state.log) ->
-          new_log = state.log ++ [{view_number, op_number, operation, sender_id}]
+          new_log = state.log ++ [{view_number, op_number, operation, sender_pid}]
           new_state = %{state | log: new_log, op_number: op_number}
 
           # Send prepare-ok back to sender
-          case find_replica_pid(state, sender_id) do
-            {:ok, sender_pid} ->
-              send(sender_pid, {:prepare_ok, view_number, op_number, state.replica_id})
-
-            :error ->
-              Logger.warning("Could not find sender replica #{sender_id}")
-          end
+          send(sender_pid, {:prepare_ok, view_number, op_number, self()})
 
           {:noreply, new_state}
 
         op_number <= length(state.log) ->
           # Already have operation, just send ok
-          case find_replica_pid(state, sender_id) do
-            {:ok, sender_pid} ->
-              send(sender_pid, {:prepare_ok, view_number, op_number, state.replica_id})
-
-            :error ->
-              Logger.warning("Could not find sender replica #{sender_id}")
-          end
+          send(sender_pid, {:prepare_ok, view_number, op_number, self()})
 
           {:noreply, state}
       end
@@ -361,8 +347,8 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:prepare_ok, view_number, op_number, _replica_id}, state) do
-    if view_number == state.view_number and state.replica_id == state.primary do
+  def handle_info({:prepare_ok, view_number, op_number, _replica_pid}, state) do
+    if view_number == state.view_number and self() == state.primary do
       current_count = Map.get(state.prepare_ok_count, op_number, 0) + 1
       new_prepare_ok_count = Map.put(state.prepare_ok_count, op_number, current_count)
 
@@ -375,7 +361,7 @@ defmodule Vsr.Replica do
         new_commit_number = max(state.commit_number, op_number)
 
         # Apply all operations up to commit point
-        Enum.each(state.log, fn {_v, op, operation, _sender_id} ->
+        Enum.each(state.log, fn {_v, op, operation, _sender_pid} ->
           if op <= new_commit_number and op > state.commit_number do
             apply_operation(state, operation)
           end
@@ -401,7 +387,7 @@ defmodule Vsr.Replica do
   def handle_info({:commit, view_number, commit_number}, state) do
     if view_number == state.view_number and commit_number > state.commit_number do
       # Apply all operations up to commit point
-      Enum.each(state.log, fn {_v, op, operation, _sender_id} ->
+      Enum.each(state.log, fn {_v, op, operation, _sender_pid} ->
         if op <= commit_number and op > state.commit_number do
           apply_operation(state, operation)
         end
@@ -414,9 +400,9 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:start_view_change, new_view_number, sender_id}, state) do
+  def handle_info({:start_view_change, new_view_number, sender_pid}, state) do
     if new_view_number > state.view_number do
-      new_view_change_votes = Map.put(state.view_change_votes, sender_id, true)
+      new_view_change_votes = Map.put(state.view_change_votes, sender_pid, true)
 
       new_state = %{
         state
@@ -427,13 +413,7 @@ defmodule Vsr.Replica do
       }
 
       # Send vote back to sender
-      case find_replica_pid(state, sender_id) do
-        {:ok, sender_pid} ->
-          send(sender_pid, {:start_view_change_ack, new_view_number, state.replica_id})
-
-        :error ->
-          Logger.warning("Could not find sender replica #{sender_id}")
-      end
+      send(sender_pid, {:start_view_change_ack, new_view_number, self()})
 
       # +1 for self
       connected_count = MapSet.size(state.connected_replicas) + 1
@@ -453,7 +433,7 @@ defmodule Vsr.Replica do
 
   def handle_info(
         {:do_view_change, new_view_number, log, last_normal_view, op_number, commit_number,
-         _sender_id},
+         _sender_pid},
         state
       ) do
     if new_view_number >= state.view_number do
@@ -492,13 +472,7 @@ defmodule Vsr.Replica do
           primary: primary_for_view(new_view_number, state.configuration)
       }
 
-      case find_replica_pid(state, new_state.primary) do
-        {:ok, primary_pid} ->
-          send(primary_pid, {:view_change_ok, new_view_number, state.replica_id})
-
-        :error ->
-          Logger.warning("Could not find primary replica #{new_state.primary}")
-      end
+      send(new_state.primary, {:view_change_ok, new_view_number, self()})
 
       {:noreply, new_state}
     else
@@ -506,13 +480,13 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:start_view_change_ack, _new_view_number, _replica_id}, state) do
+  def handle_info({:start_view_change_ack, _new_view_number, _replica_pid}, state) do
     # Handle view change acknowledgment
     {:noreply, state}
   end
 
-  def handle_info({:view_change_ok, new_view_number, replica_id}, state) do
-    new_votes = Map.put(state.view_change_votes, replica_id, true)
+  def handle_info({:view_change_ok, new_view_number, replica_pid}, state) do
+    new_votes = Map.put(state.view_change_votes, replica_pid, true)
 
     # +1 for self
     connected_count = MapSet.size(state.connected_replicas) + 1
@@ -545,7 +519,7 @@ defmodule Vsr.Replica do
   def handle_info({:new_state, new_view_number, log, op_number, commit_number}, state) do
     if new_view_number >= state.view_number or op_number > state.op_number do
       # Apply all operations from new state
-      Enum.each(log, fn {_v, op, operation, _sender_id} ->
+      Enum.each(log, fn {_v, op, operation, _sender_pid} ->
         if op <= commit_number do
           apply_operation(state, operation)
         end
@@ -577,13 +551,13 @@ defmodule Vsr.Replica do
   end
 
   defp commit_operation(state, op_number) do
-    case Enum.find(state.log, fn {_v, op, _operation, _sender_id} ->
+    case Enum.find(state.log, fn {_v, op, _operation, _sender_pid} ->
            op == op_number
          end) do
       nil ->
         :ok
 
-      {_v, _op, operation, _sender_id} ->
+      {_v, _op, operation, _sender_pid} ->
         apply_operation(state, operation)
     end
   end
@@ -612,21 +586,5 @@ defmodule Vsr.Replica do
   defp primary_for_view(view_number, configuration) do
     index = rem(view_number, length(configuration))
     Enum.at(configuration, index)
-  end
-
-  # Helper to find replica pid by replica_id in connected replicas
-  defp find_replica_pid(state, _replica_id) do
-    # For now, we need a better mapping from replica_id to pid
-    # This is a limitation of the current approach
-    # In a real implementation, we'd maintain a replica_id -> pid mapping
-    case Enum.at(state.connected_replicas, 0) do
-      {pid, _ref} -> {:ok, pid}
-      nil -> :error
-    end
-  end
-
-  # Helpers for via tuple registration
-  defp via_tuple(replica_id) do
-    {:via, Registry, {Vsr.Registry, replica_id}}
   end
 end
