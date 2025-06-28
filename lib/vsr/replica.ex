@@ -143,8 +143,16 @@ defmodule Vsr.Replica do
   end
 
   defp put_impl({key, value}, _from, state) do
-    :ets.insert(state.store, {key, value})
-    {:reply, :ok, state}
+    if state.blocking do
+      receive do
+        {:unblock, _id} ->
+          :ets.insert(state.store, {key, value})
+          {:reply, :ok, state}
+      end
+    else
+      :ets.insert(state.store, {key, value})
+      {:reply, :ok, state}
+    end
   end
 
   defp delete_impl({key}, _from, state) do
@@ -172,7 +180,6 @@ defmodule Vsr.Replica do
         {:unblock, _} -> {:noreply, state}
       end
     else
-      # Reply to client that operation succeeded immediately
       # Reply sent via GenServer call mechanism
       {:noreply, state}
     end
@@ -180,7 +187,7 @@ defmodule Vsr.Replica do
 
   # Handling GenServer callbacks
 
-  def handle_call({:dump}, _from, state) do
+  def handle_call({:dump}, from, state) do
     dump_impl(:dump, from, state)
   end
 
@@ -216,15 +223,12 @@ defmodule Vsr.Replica do
     {:noreply, state}
   end
 
-  def handle_info(
-        {:prepare, view_number, op_number, operation, _commit_number, _sender_id},
-        state
-      ) do
+  def handle_info({:prepare, view_number, op_number, operation, _commit_number, sender_id}, state) do
     if view_number >= state.view_number do
       # Append to log if new operation
       cond do
         op_number > length(state.log) ->
-          new_log = state.log ++ [{view_number, op_number, operation, _sender_id}]
+          new_log = state.log ++ [{view_number, op_number, operation, sender_id}]
           new_state = %{state | log: new_log, op_number: op_number}
           send(sender_id, {:prepare_ok, view_number, op_number, state.replica_id})
 
@@ -274,28 +278,6 @@ defmodule Vsr.Replica do
     end
   end
 
-  defp commit_operation(state, op_number) do
-    case Enum.find(state.log, fn {_v, op, _operation, _cid, _rid} -> op == op_number end) do
-      nil ->
-        :ok
-
-      {_v, _op, operation, _cid, _rid} ->
-        apply_operation(state, operation)
-    end
-  end
-
-  defp apply_operation(state, {:put, key, value}) do
-    :ets.insert(state.store, {key, value})
-    state
-  end
-
-  defp apply_operation(state, {:delete, key}) do
-    :ets.delete(state.store, key)
-    state
-  end
-
-  defp apply_operation(state, _operation), do: state
-
   def handle_info({:commit, view_number, commit_number}, state) do
     if view_number == state.view_number and commit_number > state.commit_number do
       new_state = %{state | commit_number: commit_number}
@@ -305,7 +287,7 @@ defmodule Vsr.Replica do
     end
   end
 
-  def handle_info({:start_view_change, new_view_number, _sender_id}, state) do
+  def handle_info({:start_view_change, new_view_number, sender_id}, state) do
     if new_view_number > state.view_number do
       new_view_change_votes = Map.put(state.view_change_votes, sender_id, true)
 
@@ -421,6 +403,28 @@ defmodule Vsr.Replica do
       {:noreply, state}
     end
   end
+
+  defp commit_operation(state, op_number) do
+    case Enum.find(state.log, fn {_v, op, _operation, _cid, _rid} -> op == op_number end) do
+      nil ->
+        :ok
+
+      {_v, _op, operation, _cid, _rid} ->
+        apply_operation(state, operation)
+    end
+  end
+
+  defp apply_operation(state, {:put, key, value}) do
+    :ets.insert(state.store, {key, value})
+    state
+  end
+
+  defp apply_operation(state, {:delete, key}) do
+    :ets.delete(state.store, key)
+    state
+  end
+
+  defp apply_operation(state, _operation), do: state
 
   defp count_true(map) do
     Enum.count(map, fn {_k, v} -> v end)
