@@ -49,7 +49,7 @@ defmodule Vsr.Replica do
 
     client_table = :ets.new(:client_table, [:set, :private])
     log = EtsLog.new(nil)
-    state_machine = StateMachine.new(state_machine_impl, [])
+    state_machine = state_machine_impl.new([])
 
     state = %__MODULE__{
       view_number: 0,
