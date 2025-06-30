@@ -46,5 +46,5 @@ defprotocol Vsr.StateMachine do
   def set_state(state_machine, new_state)
 after
   # generically, state machines must be initialized with a vsr instance.
-  @callback new(vsr :: pid, options :: keyword) :: t
+  @callback new(vsr:: pid, options :: keyword) :: t
 end

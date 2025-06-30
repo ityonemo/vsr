@@ -61,6 +61,7 @@ defmodule Vsr do
 
   def init(opts) do
     log = Keyword.fetch!(opts, :log)
+    {sm_mod, sm_opts} = Keyword.fetch!(opts, :state_machine)
 
     state = %__MODULE__{
       view_number: 0,
@@ -69,7 +70,7 @@ defmodule Vsr do
       commit_number: 0,
       log: log,
       replicas: MapSet.new(),
-      state_machine: Keyword.fetch!(opts, :state_machine),
+      state_machine: sm_mod.new(self(), sm_opts),
       cluster_size: Keyword.fetch!(opts, :cluster_size),
       prepare_ok_count: %{},
       view_change_votes: %{},
@@ -181,7 +182,7 @@ defmodule Vsr do
       |> increment_op_number()
       |> append_new_log(from, operation)
 
-    # Craft and send prepare message to all replicas 
+    # Craft and send prepare message to all replicas
     prepare_msg = prepare_msg(new_state, from, operation)
     Enum.each(new_state.replicas, &Message.vsr_send(&1, prepare_msg))
 
