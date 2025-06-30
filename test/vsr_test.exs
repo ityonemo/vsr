@@ -66,7 +66,7 @@ defmodule VsrTest do
     assert "temp_value" = VsrKv.get(kv1, "temp_key")
 
     assert :ok = VsrKv.delete(kv1, "temp_key")
-    assert {:error} = VsrKv.fetch(kv1, "temp_key")
+    assert :error = VsrKv.fetch(kv1, "temp_key")
     assert VsrKv.get(kv1, "temp_key") == nil
   end
 
