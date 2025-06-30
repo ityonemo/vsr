@@ -15,12 +15,8 @@ defmodule VsrTest do
     :ok = Vsr.connect(replica3, replica1)
     :ok = Vsr.connect(replica3, replica2)
 
-    # Create VsrKv wrapper instances for each replica
-    kv1 = %VsrKv{vsr: replica1}
-    kv2 = %VsrKv{vsr: replica2}
-    kv3 = %VsrKv{vsr: replica3}
 
-    {:ok, kv1: kv1, kv2: kv2, kv3: kv3, replicas: [replica1, replica2, replica3]}
+    :ok, replicas: [replica1, replica2, replica3]}
   end
 
   defp start_replica(_id) do
@@ -36,14 +32,14 @@ defmodule VsrTest do
     {:ok, pid}
   end
 
-  test "basic put and get operations", %{kv1: kv1} do
+  test "basic put and get operations", %{replicas: [replica1, _, _]} do
     # Test basic KV operations
     assert :ok = VsrKv.put(replica1, "key1", "value1")
     assert "value1" = VsrKv.get(replica1, "key1")
     assert {:ok, "value1"} = VsrKv.fetch(replica1, "key1")
   end
 
-  test "operations are replicated across cluster", %{kv1: kv1, kv2: kv2, kv3: kv3} do
+  test "operations are replicated across cluster", %{replicas: [replica1, replica2, replica3]} do
     # Put on one replica
     assert :ok = VsrKv.put(replica1, "replicated_key", "replicated_value")
 
@@ -56,7 +52,7 @@ defmodule VsrTest do
     assert "replicated_value" = VsrKv.get(replica3, "replicated_key")
   end
 
-  test "delete operations", %{kv1: kv1} do
+  test "delete operations", %{replicas: [replica1, _, _]} do
     # Put then delete
     assert :ok = VsrKv.put(replica1, "temp_key", "temp_value")
     assert "temp_value" = VsrKv.get(replica1, "temp_key")
@@ -66,18 +62,18 @@ defmodule VsrTest do
     assert VsrKv.get(replica1, "temp_key") == nil
   end
 
-  test "fetch! raises on missing key", %{kv1: kv1} do
+  test "fetch! raises on missing key", %{replicas: [replica1, _, _]} do
     assert_raise KeyError, fn ->
       VsrKv.fetch!(replica1, "nonexistent_key")
     end
   end
 
-  test "get with default value", %{kv1: kv1} do
+  test "get with default value", %{replicas: [replica1, _, _]} do
     assert "default" = VsrKv.get(replica1, "missing_key", "default")
     assert VsrKv.get(replica1, "missing_key") == nil
   end
 
-  test "concurrent operations maintain consistency", %{kv1: kv1, kv2: kv2, kv3: kv3} do
+  test "concurrent operations maintain consistency", %{replicas: [replica1, replica2, replica3]} do
     # Perform concurrent operations
     tasks =
       for i <- 1..10 do
@@ -108,7 +104,7 @@ defmodule VsrTest do
     assert state.view_number == 0
   end
 
-  test "operation number increments", %{kv1: kv1, replicas: [replica1, _, _]} do
+  test "operation number increments", %{replicas: [replica1, _, _]} do
     initial_state = Vsr.dump(replica1)
     initial_op = initial_state.op_number
 
@@ -119,7 +115,7 @@ defmodule VsrTest do
     assert new_state.op_number > initial_op
   end
 
-  test "log entries are maintained", %{kv1: kv1, replicas: [replica1, _, _]} do
+  test "log entries are maintained", %{replicas: [replica1, _, _]} do
     VsrKv.put(replica1, "log_test", "log_value")
     Process.sleep(50)
 
@@ -163,7 +159,7 @@ defmodule VsrTest do
     assert state3.cluster_size == 3
   end
 
-  test "diagnostic: manual client request", %{kv1: kv1, replicas: [replica1, _, _]} do
+  test "diagnostic: manual client request", %{replicas: [replica1, _, _]} do
     initial_state = Vsr.dump(replica1)
 
     IO.puts(
