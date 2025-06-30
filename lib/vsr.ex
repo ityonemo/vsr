@@ -61,7 +61,13 @@ defmodule Vsr do
 
   def init(opts) do
     log = Keyword.fetch!(opts, :log)
-    {sm_mod, sm_opts} = Keyword.fetch!(opts, :state_machine)
+    state_machine_spec = Keyword.fetch!(opts, :state_machine)
+
+    {sm_mod, sm_opts} =
+      case state_machine_spec do
+        {mod, opts} -> {mod, opts}
+        mod when is_atom(mod) -> {mod, []}
+      end
 
     state = %__MODULE__{
       view_number: 0,
