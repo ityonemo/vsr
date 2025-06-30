@@ -8,6 +8,14 @@ defmodule Vsr do
   alias Vsr.Message.Prepare
   alias Vsr.Message.PrepareOk
   alias Vsr.Message.Commit
+  alias Vsr.Message.StartViewChange
+  alias Vsr.Message.StartViewChangeAck
+  alias Vsr.Message.DoViewChange
+  alias Vsr.Message.StartView
+  alias Vsr.Message.ViewChangeOk
+  alias Vsr.Message.GetState
+  alias Vsr.Message.NewState
+  alias Vsr.Message.Heartbeat
   alias Vsr.StateMachine
 
   # Section 0: State
@@ -368,6 +376,181 @@ defmodule Vsr do
     end
   end
 
+  # View Change Message Implementations
+
+  defp start_view_change_impl(start_view_change, state) do
+    if start_view_change.view > state.view_number do
+      # Transition to view change status
+      new_state = %{
+        state
+        | status: :view_change,
+          view_number: start_view_change.view,
+          last_normal_view: state.view_number
+      }
+
+      # Send acknowledgment
+      Message.vsr_send(start_view_change.replica, %StartViewChangeAck{
+        view: start_view_change.view,
+        replica: self()
+      })
+
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp start_view_change_ack_impl(ack, state) do
+    if ack.view == state.view_number and state.status == :view_change do
+      # Count view change votes
+      votes = Map.update(state.view_change_votes, ack.view, [ack.replica], &[ack.replica | &1])
+      new_state = %{state | view_change_votes: votes}
+
+      # Check if we have enough votes to proceed
+      vote_count = length(Map.get(votes, ack.view, []))
+      total_replicas = MapSet.size(state.replicas) + 1
+
+      if vote_count > div(total_replicas, 2) do
+        # Enough votes, send DO-VIEW-CHANGE to new primary
+        new_primary = primary_for_view(ack.view, state.replicas)
+
+        Message.vsr_send(new_primary, %DoViewChange{
+          view: ack.view,
+          log: Log.get_all(state.log),
+          last_normal_view: state.last_normal_view,
+          op_number: state.op_number,
+          commit_number: state.commit_number,
+          from: self()
+        })
+
+        {:noreply, new_state}
+      else
+        {:noreply, new_state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp do_view_change_impl(do_view_change, state) do
+    if primary?(state) and do_view_change.view == state.view_number and
+         state.status == :view_change do
+      # Collect view change data and update log if necessary
+      current_log = Log.get_all(state.log)
+      received_log = do_view_change.log
+
+      # Use the log with higher op_number or more recent view
+      new_log =
+        if do_view_change.op_number > state.op_number do
+          received_log
+        else
+          current_log
+        end
+
+      new_state = %{
+        state
+        | log: Log.replace(state.log, new_log),
+          op_number: max(state.op_number, do_view_change.op_number),
+          commit_number: max(state.commit_number, do_view_change.commit_number)
+      }
+
+      # Send START-VIEW to all replicas
+      start_view_msg = %StartView{
+        view: state.view_number,
+        log: Log.get_all(new_state.log),
+        op_number: new_state.op_number,
+        commit_number: new_state.commit_number
+      }
+
+      Enum.each(state.replicas, &Message.vsr_send(&1, start_view_msg))
+
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp start_view_impl(start_view, state) do
+    if start_view.view >= state.view_number do
+      # Update state with new view information
+      new_state = %{
+        state
+        | view_number: start_view.view,
+          status: :normal,
+          log: Log.replace(state.log, start_view.log),
+          op_number: start_view.op_number,
+          commit_number: start_view.commit_number,
+          view_change_votes: %{}
+      }
+
+      # Send VIEW-CHANGE-OK to new primary
+      new_primary = primary_for_view(start_view.view, state.replicas)
+
+      Message.vsr_send(new_primary, %ViewChangeOk{
+        view: start_view.view,
+        from: self()
+      })
+
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp view_change_ok_impl(view_change_ok, state) do
+    if primary?(state) and view_change_ok.view == state.view_number do
+      # View change complete for this replica
+      {:noreply, state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  # State Transfer Message Implementations
+
+  defp get_state_impl(get_state, state) do
+    # Send current state to requesting replica
+    new_state_msg = %NewState{
+      view: state.view_number,
+      log: Log.get_all(state.log),
+      op_number: state.op_number,
+      commit_number: state.commit_number,
+      state_machine_state: StateMachine.get_state(state.state_machine)
+    }
+
+    Message.vsr_send(get_state.sender, new_state_msg)
+
+    {:noreply, state}
+  end
+
+  defp new_state_impl(new_state, state) do
+    if new_state.view >= state.view_number do
+      # Update state with received information
+      new_state_machine =
+        StateMachine.set_state(state.state_machine, new_state.state_machine_state)
+
+      updated_state = %{
+        state
+        | view_number: new_state.view,
+          log: Log.replace(state.log, new_state.log),
+          op_number: new_state.op_number,
+          commit_number: new_state.commit_number,
+          state_machine: new_state_machine
+      }
+
+      {:noreply, updated_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  # Control Message Implementations
+
+  defp heartbeat_impl(_heartbeat, state) do
+    # Heartbeat received, replica is alive
+    {:noreply, state}
+  end
+
   def start_view_change(pid), do: GenServer.cast(pid, :start_view_change)
 
   def get_state(pid), do: GenServer.call(pid, :get_state)
@@ -429,6 +612,14 @@ defmodule Vsr do
       Prepare -> prepare_impl(msg, state)
       PrepareOk -> prepare_ok_impl(msg, state)
       Commit -> commit_impl(msg, state)
+      StartViewChange -> start_view_change_impl(msg, state)
+      StartViewChangeAck -> start_view_change_ack_impl(msg, state)
+      DoViewChange -> do_view_change_impl(msg, state)
+      StartView -> start_view_impl(msg, state)
+      ViewChangeOk -> view_change_ok_impl(msg, state)
+      GetState -> get_state_impl(msg, state)
+      NewState -> new_state_impl(msg, state)
+      Heartbeat -> heartbeat_impl(msg, state)
     end
   end
 
