@@ -155,7 +155,7 @@ defmodule VsrTest do
     "Before operation - Op number: #{initial_state.op_number}, Log length: #{length(initial_state.log)}"
 
     # Try a manual client request
-    result = VsrKv.put(replica1, "debug_key", "debug_value")
+    _result = VsrKv.put(replica1, "debug_key", "debug_value")
 
     Process.sleep(100)
 
@@ -165,7 +165,7 @@ defmodule VsrTest do
 
     # Check if operation was logged
     if length(final_state.log) > 0 do
-      [latest_entry | _] = final_state.log
+      [_latest_entry | _] = final_state.log
     end
   end
 
