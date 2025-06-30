@@ -7,6 +7,7 @@ defmodule Vsr do
   alias Vsr.Message.ClientRequest
   alias Vsr.Message.Prepare
   alias Vsr.Message.PrepareOk
+  alias Vsr.Message.Commit
   alias Vsr.StateMachine
 
   # Section 0: State
@@ -82,14 +83,14 @@ defmodule Vsr do
   # Section 2: API Impls
   def connect(pid, to_pid), do: GenServer.call(pid, {:connect, to_pid})
 
-  defp connect_impl({target_replica_pid}, _from, state) do
+  defp connect_impl(target_replica_pid, _from, state) do
     # Monitor the target replica
-    ref = Process.monitor(target_replica_pid)
+    Process.monitor(target_replica_pid)
 
-    # Add to connected replicas with monitoring reference
-    new_connected_replicas = MapSet.put(state.connected_replicas, {target_replica_pid, ref})
+    # Add to connected replicas
+    new_replicas = MapSet.put(state.replicas, target_replica_pid)
 
-    new_state = %{state | connected_replicas: new_connected_replicas}
+    new_state = %{state | replicas: new_replicas}
 
     {:reply, :ok, new_state}
   end
@@ -116,8 +117,8 @@ defmodule Vsr do
 
       read_only or not requires_linearized ->
         # do the read-only operation without the quorum.
-        {_, reply} = StateMachine.apply_operation(state.state_machine, operation)
-        {:reply, {:ok, reply}, state}
+        {new_state_machine, reply} = StateMachine.apply_operation(state.state_machine, operation)
+        {:reply, {:ok, reply}, %{state | state_machine: new_state_machine}}
 
       :else ->
         # TODO: convert this into a proper quorum exception.
@@ -126,14 +127,14 @@ defmodule Vsr do
   end
 
   defp client_request_linearized(read_only, operation, from, state) do
-    primary = primary?(state)
+    is_primary = primary?(state)
 
     cond do
       state.status != :normal ->
         # TODO: convert this into a better quorum exception
         {:reply, {:error, :not_normal}, state}
 
-      primary ->
+      is_primary ->
         client_request_impl(
           %ClientRequest{operation: operation, from: from, read_only: read_only},
           state
@@ -141,36 +142,43 @@ defmodule Vsr do
 
       :else ->
         # send the client request to the primary
-        state
-        |> primary
-        |> Message.vsr_send(%ClientRequest{
+        primary_pid = primary(state)
+
+        Message.vsr_send(primary_pid, %ClientRequest{
           operation: operation,
           from: from,
           read_only: read_only
         })
+
+        {:noreply, state}
     end
   end
 
   # client request.  Received by the primary replica.
-  defp client_request_impl(%{operation: operation, from: from, read_only: true}, state) do
+  defp client_request_impl(
+         %ClientRequest{operation: operation, from: from, read_only: true},
+         state
+       ) do
     # If read-only, we can reply immediately
-    {_, reply} = StateMachine.apply_operation(state.state_machine, operation)
+    {new_state_machine, reply} = StateMachine.apply_operation(state.state_machine, operation)
     GenServer.reply(from, {:ok, reply})
-    {:noreply, state}
+    {:noreply, %{state | state_machine: new_state_machine}}
   end
 
-  defp client_request_impl(%{operation: operation, from: from}, state) do
+  defp client_request_impl(%ClientRequest{operation: operation, from: from}, state) do
     # not read-only case, so operation must be prepared and sent to replicas.
     # Append the operation to the log
     new_state =
       state
       |> increment_op_number()
       |> append_new_log(from, operation)
-      |> tap(fn state ->
-        # Craft and send prepare message to all replicas 
-        prepare_msg = prepare_msg(state, from, operation)
-        Enum.each(state.replicas, &Message.vsr_send(&1, prepare_msg))
-      end)
+
+    # Craft and send prepare message to all replicas 
+    prepare_msg = prepare_msg(new_state, from, operation)
+    Enum.each(new_state.replicas, &Message.vsr_send(&1, prepare_msg))
+
+    # Check if we have quorum immediately (for single replica or immediate majority)
+    new_state = maybe_commit_operation(new_state, new_state.op_number)
 
     {:noreply, new_state}
   end
@@ -220,7 +228,8 @@ defmodule Vsr do
         state
         |> Map.update!(:log, &Log.append(&1, entry))
         |> Map.replace(:op_number, prepare.op_number)
-        |> send_prepare_ok(prepare)
+
+      send_prepare_ok(new_state, prepare)
 
       {:noreply, new_state}
     else
@@ -232,15 +241,18 @@ defmodule Vsr do
       {:view, _} ->
         # TODO: check to make sure that doing nothing is valid.
         # do we have to trigger an election?
-        raise "unimplemented"
+        Logger.warn(
+          "Received prepare with old view #{prepare.view}, current view #{state.view_number}"
+        )
+
         {:noreply, state}
     end
   end
 
-  defp send_prepare_ok(prepare, state) do
-    state
-    |> primary()
-    |> Message.vsr_send(%PrepareOk{
+  defp send_prepare_ok(state, prepare) do
+    primary_pid = primary(state)
+
+    Message.vsr_send(primary_pid, %PrepareOk{
       view: prepare.view,
       op_number: prepare.op_number,
       from: self()
@@ -249,66 +261,112 @@ defmodule Vsr do
 
   defp prepare_ok_impl(prepare_ok, state) do
     if primary?(state) and prepare_ok.view == state.view_number do
-      state
-      |> increment_ok_count(prepare_ok.op_number)
+      new_state = increment_ok_count(state, prepare_ok.op_number)
+      new_state = maybe_commit_operation(new_state, prepare_ok.op_number)
+      {:noreply, new_state}
     else
       {:noreply, state}
     end
   end
 
   defp increment_ok_count(%{prepare_ok_count: ok_count} = state, op_number) do
-    count = ok_count[op_number] + 1
-    %{state | prepare_ok_count: Map.replace(ok_count, op_number, count)}
+    count = Map.get(ok_count, op_number, 0) + 1
+    %{state | prepare_ok_count: Map.put(ok_count, op_number, count)}
   end
 
+  defp maybe_commit_operation(state, op_number) do
+    current_count = Map.get(state.prepare_ok_count, op_number, 0)
+    # +1 for self (primary)
+    replica_count = MapSet.size(state.replicas) + 1
 
-    # if msg.view == state.view_number and self() == state.primary do
-    #  current_count = Map.get(state.prepare_ok_count, msg.op_number, 0) + 1
-    #  new_prepare_ok_count = Map.put(state.prepare_ok_count, msg.op_number, current_count)
-    #
-    #  # +1 for self
-    #  connected_count = MapSet.size(state.connected_replicas) + 1
-    #
-    #  # Check if we have majority
-    #  if current_count > div(connected_count, 2) do
-    #    # Majority received, commit operation and send commit messages
-    #    new_commit_number = max(state.commit_number, msg.op_number)
-    #
-    #    # Apply all operations up to commit point and send client replies
-    #    log_entries = Log.get_all(state.log)
-    #
-    #    {new_state_machine, _} =
-    #      apply_operations_and_send_replies(
-    #        log_entries,
-    #        state.state_machine,
-    #        state.commit_number,
-    #        new_commit_number,
-    #        state.client_table
-    #      )
-    #
-    #    # Send commit messages to connected replicas
-    #    commit_message = %Messages.Commit{
-    #      view: msg.view,
-    #      commit_number: new_commit_number
-    #    }
-    #
-    #    for {replica_pid, _ref} <- state.connected_replicas do
-    #      Messages.vsr_send(replica_pid, commit_message)
-    #    end
-    #
-    #    {:noreply,
-    #     %{
-    #       state
-    #       | commit_number: new_commit_number,
-    #         prepare_ok_count: new_prepare_ok_count,
-    #         state_machine: new_state_machine
-    #     }}
-    #  else
-    #    {:noreply, %{state | prepare_ok_count: new_prepare_ok_count}}
-    #  end
-    # else
-    #  {:noreply, state}
-    # end
+    # Check if we have majority
+    if current_count > div(replica_count, 2) do
+      # Majority received, commit operation and send commit messages
+      new_commit_number = max(state.commit_number, op_number)
+
+      # Apply all operations up to commit point and send client replies
+      log_entries = Log.get_all(state.log)
+
+      {new_state_machine, _} =
+        apply_operations_and_send_replies(
+          log_entries,
+          state.state_machine,
+          state.commit_number,
+          new_commit_number
+        )
+
+      # Send commit messages to connected replicas
+      commit_message = %Commit{
+        view: state.view_number,
+        commit_number: new_commit_number
+      }
+
+      Enum.each(state.replicas, &Message.vsr_send(&1, commit_message))
+
+      %{
+        state
+        | commit_number: new_commit_number,
+          state_machine: new_state_machine
+      }
+    else
+      state
+    end
+  end
+
+  defp apply_operations_and_send_replies(
+         log_entries,
+         state_machine,
+         old_commit_number,
+         new_commit_number
+       ) do
+    # Find operations to commit
+    operations_to_commit =
+      log_entries
+      |> Enum.filter(fn entry ->
+        entry.op_number > old_commit_number and entry.op_number <= new_commit_number
+      end)
+      |> Enum.sort_by(& &1.op_number)
+
+    # Apply operations and collect results
+    {final_state_machine, _results} =
+      Enum.reduce(operations_to_commit, {state_machine, []}, fn entry, {sm, results} ->
+        {new_sm, result} = StateMachine.apply_operation(sm, entry.operation)
+
+        # Send reply to client if this is a client request
+        if entry.sender_id do
+          GenServer.reply(entry.sender_id, {:ok, result})
+        end
+
+        {new_sm, [result | results]}
+      end)
+
+    {final_state_machine, :ok}
+  end
+
+  defp commit_impl(commit, state) do
+    if commit.view == state.view_number and commit.commit_number > state.commit_number do
+      # Apply all operations up to commit point
+      log_entries = Log.get_all(state.log)
+
+      {new_state_machine, _} =
+        apply_operations_and_send_replies(
+          log_entries,
+          state.state_machine,
+          state.commit_number,
+          commit.commit_number
+        )
+
+      new_state = %{
+        state
+        | commit_number: commit.commit_number,
+          state_machine: new_state_machine
+      }
+
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
 
   def start_view_change(pid), do: GenServer.cast(pid, :start_view_change)
 
@@ -337,13 +395,21 @@ defmodule Vsr do
   defp primary(state), do: primary_for_view(state.view_number, state.replicas)
 
   defp primary_for_view(view_number, replicas) do
-    [self() | MapSet.to_list(replicas)]
-    |> Enum.sort()
-    |> Enum.at(rem(view_number, length(replicas + 1)))
+    all_replicas = [self() | MapSet.to_list(replicas)]
+    sorted_replicas = Enum.sort(all_replicas)
+    replica_count = length(sorted_replicas)
+
+    if replica_count > 0 do
+      Enum.at(sorted_replicas, rem(view_number, replica_count))
+    else
+      self()
+    end
   end
 
   defp quorum?(state) do
-    MapSet.size(state.replicas) > div(state.cluster_size, 2)
+    # +1 for self
+    replica_count = MapSet.size(state.replicas) + 1
+    replica_count > div(state.cluster_size, 2)
   end
 
   defp increment_op_number(state), do: Map.update!(state, :op_number, &(&1 + 1))
@@ -362,44 +428,9 @@ defmodule Vsr do
       ClientRequest -> client_request_impl(msg, state)
       Prepare -> prepare_impl(msg, state)
       PrepareOk -> prepare_ok_impl(msg, state)
+      Commit -> commit_impl(msg, state)
     end
   end
-
-  #  def handle_cast({:start_view_change}, state) do
-  #    new_view_number = state.view_number + 1
-  #
-  #    # Send start view change to all connected replicas
-  #    start_view_change_msg = %Messages.StartViewChange{
-  #      view: new_view_number,
-  #      sender: self()
-  #    }
-  #
-  #    for {replica_pid, _ref} <- state.connected_replicas do
-  #      Messages.vsr_send(replica_pid, start_view_change_msg)
-  #    end
-  #
-  #    new_state = %{
-  #      state
-  #      | view_number: new_view_number,
-  #        status: :view_change,
-  #        primary: primary_for_view(new_view_number, state.configuration),
-  #        view_change_votes: Map.put(state.view_change_votes, self(), true)
-  #    }
-  #
-  #    {:noreply, new_state}
-  #  end
-  #
-  #  def handle_cast({:get_state, target_replica}, state) do
-  #    # Synchronously request state from target replica
-  #    get_state_msg = %Messages.GetState{
-  #      view: state.view_number,
-  #      op_number: state.op_number,
-  #      sender: self()
-  #    }
-  #
-  #    Messages.vsr_send(target_replica, get_state_msg)
-  #    {:noreply, state}
-  #  end
 
   def handle_info({:DOWN, ref, :process, pid, _reason}, state),
     do: disconnect_impl(ref, pid, state)
