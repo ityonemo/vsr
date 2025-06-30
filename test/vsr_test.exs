@@ -66,8 +66,8 @@ defmodule VsrTest do
     assert "temp_value" = VsrKv.get(kv1, "temp_key")
 
     assert :ok = VsrKv.delete(kv1, "temp_key")
-    assert :error = VsrKv.fetch(kv1, "temp_key")
-    assert nil = VsrKv.get(kv1, "temp_key")
+    assert {:error} = VsrKv.fetch(kv1, "temp_key")
+    assert VsrKv.get(kv1, "temp_key") == nil
   end
 
   test "fetch! raises on missing key", %{kv1: kv1} do
@@ -78,7 +78,7 @@ defmodule VsrTest do
 
   test "get with default value", %{kv1: kv1} do
     assert "default" = VsrKv.get(kv1, "missing_key", "default")
-    assert nil = VsrKv.get(kv1, "missing_key")
+    assert VsrKv.get(kv1, "missing_key") == nil
   end
 
   test "concurrent operations maintain consistency", %{kv1: kv1, kv2: kv2, kv3: kv3} do
