@@ -1,5 +1,5 @@
 defmodule VsrTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
 
   setup do
     # Initialize VSR replicas with list log and VsrKv state machine
@@ -32,12 +32,15 @@ defmodule VsrTest do
 
   defp start_replica(id) do
     # Use empty list as initial log (list log implementation)
-    Vsr.start_link(
-      log: [],
-      state_machine: VsrKv.new(self(), []),
-      cluster_size: 3,
-      name: :"replica_#{id}"
-    )
+    start_supervised({
+      Vsr,
+      [
+        log: [],
+        state_machine: VsrKv.new(self(), []),
+        cluster_size: 3,
+        name: :"replica_#{id}"
+      ]
+    })
   end
 
   test "basic put and get operations", %{kv1: kv1} do
