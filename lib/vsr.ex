@@ -241,7 +241,7 @@ defmodule Vsr do
       {:view, _} ->
         # TODO: check to make sure that doing nothing is valid.
         # do we have to trigger an election?
-        Logger.warn(
+        Logger.warning(
           "Received prepare with old view #{prepare.view}, current view #{state.view_number}"
         )
 
