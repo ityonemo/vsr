@@ -135,14 +135,11 @@ defmodule VsrTest do
     state2 = Vsr.dump(replica2)
     state3 = Vsr.dump(replica3)
 
-      "Replica 1 - Connected: #{MapSet.size(state1.replicas)}, Cluster Size: #{state1.cluster_size}"
-    )
+    "Replica 1 - Connected: #{MapSet.size(state1.replicas)}, Cluster Size: #{state1.cluster_size}"
 
-      "Replica 2 - Connected: #{MapSet.size(state2.replicas)}, Cluster Size: #{state2.cluster_size}"
-    )
+    "Replica 2 - Connected: #{MapSet.size(state2.replicas)}, Cluster Size: #{state2.cluster_size}"
 
-      "Replica 3 - Connected: #{MapSet.size(state3.replicas)}, Cluster Size: #{state3.cluster_size}"
-    )
+    "Replica 3 - Connected: #{MapSet.size(state3.replicas)}, Cluster Size: #{state3.cluster_size}"
 
     # Check which replica thinks it's primary
 
@@ -155,8 +152,7 @@ defmodule VsrTest do
   test "diagnostic: manual client request", %{replicas: [replica1, _, _]} do
     initial_state = Vsr.dump(replica1)
 
-      "Before operation - Op number: #{initial_state.op_number}, Log length: #{length(initial_state.log)}"
-    )
+    "Before operation - Op number: #{initial_state.op_number}, Log length: #{length(initial_state.log)}"
 
     # Try a manual client request
     result = VsrKv.put(replica1, "debug_key", "debug_value")
@@ -165,8 +161,7 @@ defmodule VsrTest do
 
     final_state = Vsr.dump(replica1)
 
-      "After operation - Op number: #{final_state.op_number}, Log length: #{length(final_state.log)}"
-    )
+    "After operation - Op number: #{final_state.op_number}, Log length: #{length(final_state.log)}"
 
     # Check if operation was logged
     if length(final_state.log) > 0 do
