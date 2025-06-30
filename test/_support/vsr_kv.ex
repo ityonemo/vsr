@@ -8,6 +8,10 @@ defmodule VsrKv do
 
   # external API
 
+  def new(vsr, options) do
+    %__MODULE__{vsr: vsr}
+  end
+
   def start_link(vsr, options) do
     kv = VsrKv.new(vsr, options)
     {:ok, kv}
