@@ -1,14 +1,13 @@
-defmodule Vsr.MixProject do
+defmodule VsrKv.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :vsr,
+      app: :vsr_kv,
       version: "0.1.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
-      deps: deps(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      deps: deps()
     ]
   end
 
@@ -19,13 +18,10 @@ defmodule Vsr.MixProject do
     ]
   end
 
-  def elixirc_paths(:test), do: ["lib", "test/_support"]
-  def elixirc_paths(_), do: ["lib"]
-
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:protoss, "~> 1.1"}
+      {:vsr, path: "../vsr"}
     ]
   end
 end
