@@ -23,7 +23,6 @@ defmodule VsrTest do
        kv2: replica2,
        kv3: replica3
      }}
-     }}
   end
 
   defp start_replica(id) do
