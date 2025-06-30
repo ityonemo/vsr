@@ -38,43 +38,43 @@ defmodule VsrTest do
 
   test "basic put and get operations", %{kv1: kv1} do
     # Test basic KV operations
-    assert :ok = VsrKv.put(kv1, "key1", "value1")
-    assert "value1" = VsrKv.get(kv1, "key1")
-    assert {:ok, "value1"} = VsrKv.fetch(kv1, "key1")
+    assert :ok = VsrKv.put(replica1, "key1", "value1")
+    assert "value1" = VsrKv.get(replica1, "key1")
+    assert {:ok, "value1"} = VsrKv.fetch(replica1, "key1")
   end
 
   test "operations are replicated across cluster", %{kv1: kv1, kv2: kv2, kv3: kv3} do
     # Put on one replica
-    assert :ok = VsrKv.put(kv1, "replicated_key", "replicated_value")
+    assert :ok = VsrKv.put(replica1, "replicated_key", "replicated_value")
 
     # Small delay to allow replication
     Process.sleep(100)
 
     # Should be available on all replicas
-    assert "replicated_value" = VsrKv.get(kv1, "replicated_key")
-    assert "replicated_value" = VsrKv.get(kv2, "replicated_key")
-    assert "replicated_value" = VsrKv.get(kv3, "replicated_key")
+    assert "replicated_value" = VsrKv.get(replica1, "replicated_key")
+    assert "replicated_value" = VsrKv.get(replica2, "replicated_key")
+    assert "replicated_value" = VsrKv.get(replica3, "replicated_key")
   end
 
   test "delete operations", %{kv1: kv1} do
     # Put then delete
-    assert :ok = VsrKv.put(kv1, "temp_key", "temp_value")
-    assert "temp_value" = VsrKv.get(kv1, "temp_key")
+    assert :ok = VsrKv.put(replica1, "temp_key", "temp_value")
+    assert "temp_value" = VsrKv.get(replica1, "temp_key")
 
-    assert :ok = VsrKv.delete(kv1, "temp_key")
-    assert :error = VsrKv.fetch(kv1, "temp_key")
-    assert VsrKv.get(kv1, "temp_key") == nil
+    assert :ok = VsrKv.delete(replica1, "temp_key")
+    assert :error = VsrKv.fetch(replica1, "temp_key")
+    assert VsrKv.get(replica1, "temp_key") == nil
   end
 
   test "fetch! raises on missing key", %{kv1: kv1} do
     assert_raise KeyError, fn ->
-      VsrKv.fetch!(kv1, "nonexistent_key")
+      VsrKv.fetch!(replica1, "nonexistent_key")
     end
   end
 
   test "get with default value", %{kv1: kv1} do
-    assert "default" = VsrKv.get(kv1, "missing_key", "default")
-    assert VsrKv.get(kv1, "missing_key") == nil
+    assert "default" = VsrKv.get(replica1, "missing_key", "default")
+    assert VsrKv.get(replica1, "missing_key") == nil
   end
 
   test "concurrent operations maintain consistency", %{kv1: kv1, kv2: kv2, kv3: kv3} do
@@ -82,7 +82,7 @@ defmodule VsrTest do
     tasks =
       for i <- 1..10 do
         Task.async(fn ->
-          VsrKv.put(kv1, "concurrent_#{i}", "value_#{i}")
+          VsrKv.put(replica1, "concurrent_#{i}", "value_#{i}")
         end)
       end
 
@@ -97,9 +97,9 @@ defmodule VsrTest do
       key = "concurrent_#{i}"
       expected = "value_#{i}"
 
-      assert ^expected = VsrKv.get(kv1, key)
-      assert ^expected = VsrKv.get(kv2, key)
-      assert ^expected = VsrKv.get(kv3, key)
+      assert ^expected = VsrKv.get(replica1, key)
+      assert ^expected = VsrKv.get(replica2, key)
+      assert ^expected = VsrKv.get(replica3, key)
     end
   end
 
@@ -112,7 +112,7 @@ defmodule VsrTest do
     initial_state = Vsr.dump(replica1)
     initial_op = initial_state.op_number
 
-    VsrKv.put(kv1, "test", "value")
+    VsrKv.put(replica1, "test", "value")
     Process.sleep(50)
 
     new_state = Vsr.dump(replica1)
@@ -120,7 +120,7 @@ defmodule VsrTest do
   end
 
   test "log entries are maintained", %{kv1: kv1, replicas: [replica1, _, _]} do
-    VsrKv.put(kv1, "log_test", "log_value")
+    VsrKv.put(replica1, "log_test", "log_value")
     Process.sleep(50)
 
     state = Vsr.dump(replica1)
@@ -171,7 +171,7 @@ defmodule VsrTest do
     )
 
     # Try a manual client request
-    result = VsrKv.put(kv1, "debug_key", "debug_value")
+    result = VsrKv.put(replica1, "debug_key", "debug_value")
     IO.puts("Put result: #{inspect(result)}")
 
     Process.sleep(100)
