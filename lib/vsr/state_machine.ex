@@ -1,3 +1,5 @@
+use Protoss
+
 defprotocol Vsr.StateMachine do
   @moduledoc """
   Protocol for pluggable state machines in VSR replicas.
@@ -9,9 +11,17 @@ defprotocol Vsr.StateMachine do
   """
 
   @doc """
-  Creates a new state machine instance with the given options.
+  true if the operation must be linearizable.  If not, then
+  the VSR replica will pick speed and use a stale read instead.
   """
-  def new(state_machine, opts \\ [])
+  def require_linearized?(state_machine, operation)
+
+  @doc """
+  true if the operation is read-only and does not change its
+  state.  Read-only operations may be performed if the network
+  does not have a quorum.
+  """
+  def read_only?(state_machine, operation)
 
   @doc """
   Applies an operation to the state machine and returns the new state
@@ -34,4 +44,7 @@ defprotocol Vsr.StateMachine do
   Used during state transfer from other replicas.
   """
   def set_state(state_machine, new_state)
+after
+  # generically, state machines must be initialized with a vsr instance.
+  @callback new(vsr :: pid, options :: keyword) :: t
 end

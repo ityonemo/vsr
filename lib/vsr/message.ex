@@ -1,4 +1,4 @@
-defmodule Vsr.Messages do
+defmodule Vsr.Message do
   @moduledoc """
   VSR protocol message definitions.
 
@@ -9,12 +9,12 @@ defmodule Vsr.Messages do
   # Normal Operation Messages
   defmodule Prepare do
     @moduledoc "PREPARE message sent by primary to backups"
-    defstruct [:view, :op_number, :operation, :commit_number, :sender]
+    defstruct [:view, :op_number, :operation, :commit_number, :from]
   end
 
   defmodule PrepareOk do
     @moduledoc "PREPARE-OK response sent by backups to primary"
-    defstruct [:view, :op_number, :sender]
+    defstruct [:view, :op_number, :replica]
   end
 
   defmodule Commit do
@@ -25,17 +25,17 @@ defmodule Vsr.Messages do
   # View Change Messages
   defmodule StartViewChange do
     @moduledoc "START-VIEW-CHANGE message to initiate view change"
-    defstruct [:view, :sender]
+    defstruct [:view, :replica]
   end
 
   defmodule StartViewChangeAck do
     @moduledoc "ACK response to START-VIEW-CHANGE"
-    defstruct [:view, :sender]
+    defstruct [:view, :replica]
   end
 
   defmodule DoViewChange do
     @moduledoc "DO-VIEW-CHANGE message sent to new primary"
-    defstruct [:view, :log, :last_normal_view, :op_number, :commit_number, :sender]
+    defstruct [:view, :log, :last_normal_view, :op_number, :commit_number, :from]
   end
 
   defmodule StartView do
@@ -45,7 +45,7 @@ defmodule Vsr.Messages do
 
   defmodule ViewChangeOk do
     @moduledoc "VIEW-CHANGE-OK response to new primary"
-    defstruct [:view, :sender]
+    defstruct [:view, :from]
   end
 
   # State Transfer Messages
@@ -62,18 +62,15 @@ defmodule Vsr.Messages do
   # Client Messages
   defmodule ClientRequest do
     @moduledoc "Client request message"
-    defstruct [:operation, :client_id, :request_id]
+    defstruct [:operation, :from, :read_only]
   end
 
-  defmodule ClientReply do
-    @moduledoc "Reply to client request"
-    defstruct [:request_id, :result]
-  end
+  # CLIENT-REPLY is ignored since we can directly reply over erlang message bus.
 
   # Control Messages
-  defmodule Unblock do
-    @moduledoc "Control message to unblock replica"
-    defstruct [:id]
+  defmodule Heartbeat do
+    @moduledoc "Control message for primary to check replica liveness"
+    defstruct []
   end
 
   @doc """
@@ -83,10 +80,6 @@ defmodule Vsr.Messages do
   VSR messages between replicas with proper error handling.
   """
   def vsr_send(target_pid, message) when is_pid(target_pid) do
-    send(target_pid, message)
-  end
-
-  def vsr_send(target_pid, _message) do
-    {:error, {:invalid_target, target_pid}}
+    GenServer.cast(target_pid, {:vsr, message})
   end
 end

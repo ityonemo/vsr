@@ -1,3 +1,5 @@
+use Protoss
+
 defprotocol Vsr.Log do
   @moduledoc """
   Protocol for abstract log storage in VSR.
@@ -7,30 +9,32 @@ defprotocol Vsr.Log do
   scenarios (in-memory, persistent, distributed, etc.).
   """
 
-  @type view :: non_neg_integer()
-  @type op_number :: non_neg_integer()
-  @type operation :: term()
-  @type sender_id :: pid()
-  @type log_entry :: {view(), op_number(), operation(), sender_id()}
+  defmodule Entry do
+    defstruct [:view, :op_number, :operation, :sender_id]
 
-  @doc """
-  Create a new log instance.
-  """
-  def new(log_impl, opts \\ [])
+    @type t :: %__MODULE__{
+            view: non_neg_integer(),
+            op_number: non_neg_integer(),
+            operation: term(),
+            sender_id: pid()
+          }
+  end
+
+  @type log_entry :: Entry.t()
 
   @doc """
   Append an entry to the log.
 
   Returns the updated log.
   """
-  def append(log, view, op_number, operation, sender_id)
+  def append(log, t)
 
   @doc """
-  Get an entry at the specified operation number.
+  Fetch an entry at the specified operation number.
 
   Returns `{:ok, entry}` if found, `{:error, :not_found}` otherwise.
   """
-  def get(log, op_number)
+  def fetch(log, op_number)
 
   @doc """
   Get all entries in the log.
