@@ -101,9 +101,9 @@ defmodule VsrTest do
       key = "concurrent_#{i}"
       expected = "value_#{i}"
 
-      assert expected = VsrKv.get(kv1, key)
-      assert expected = VsrKv.get(kv2, key)
-      assert expected = VsrKv.get(kv3, key)
+      assert ^expected = VsrKv.get(kv1, key)
+      assert ^expected = VsrKv.get(kv2, key)
+      assert ^expected = VsrKv.get(kv3, key)
     end
   end
 
