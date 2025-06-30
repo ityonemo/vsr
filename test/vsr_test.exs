@@ -2,7 +2,7 @@ defmodule VsrTest do
   use ExUnit.Case
 
   setup do
-    # Initialize VSR replicas with list log and VsrKv state machine
+    # Start replicas without global names to avoid conflicts
     {:ok, replica1} = start_replica(1)
     {:ok, replica2} = start_replica(2)
     {:ok, replica3} = start_replica(3)
@@ -25,17 +25,17 @@ defmodule VsrTest do
      }}
   end
 
-  defp start_replica(id) do
+  defp start_replica(_id) do
     # Use empty list as initial log (list log implementation)
-
-    start_supervised({
-      Vsr,
-      [
+    # Start VSR replica directly without global registration
+    {:ok, pid} =
+      GenServer.start_link(Vsr,
         log: [],
         state_machine: VsrKv,
         cluster_size: 3
-      ]
-    })
+      )
+
+    {:ok, pid}
   end
 
   test "basic put and get operations", %{kv1: kv1} do
