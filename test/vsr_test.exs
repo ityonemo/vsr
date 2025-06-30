@@ -15,18 +15,14 @@ defmodule VsrTest do
     :ok = Vsr.connect(replica3, replica1)
     :ok = Vsr.connect(replica3, replica2)
 
-    # Create VsrKv instances using start_link
-    {:ok, kv1} = VsrKv.start_link(replica1, [])
-    {:ok, kv2} = VsrKv.start_link(replica2, [])
-    {:ok, kv3} = VsrKv.start_link(replica3, [])
-
+    # VsrKv instances are created by the VSR replicas themselves
     {:ok,
      %{
        replicas: [replica1, replica2, replica3],
-       kvs: [kv1, kv2, kv3],
-       kv1: kv1,
-       kv2: kv2,
-       kv3: kv3
+       kv1: replica1,
+       kv2: replica2,
+       kv3: replica3
+     }}
      }}
   end
 
@@ -39,7 +35,7 @@ defmodule VsrTest do
       Vsr,
       [
         log: [],
-        state_machine: {VsrKv, []},
+        state_machine: VsrKv,
         cluster_size: 3,
         name: unique_name
       ]
