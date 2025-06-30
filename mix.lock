@@ -1,0 +1,3 @@
+%{
+  "protoss": {:hex, :protoss, "1.1.0", "853533313989751c7da5b0e1ce71501a23f3dc41f128709478af40daccc6e959", [:mix], [], "hexpm", "c2f874383dd047fcfdf467b814dd33a208a4d24a467aef90d86185b41a0752ad"},
+}
