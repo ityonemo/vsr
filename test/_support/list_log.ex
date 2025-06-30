@@ -50,10 +50,10 @@ defimpl Vsr.Log, for: List do
 
   Used during state transfer and view changes.
   """
-  def replace(log, entries), do: Enum.reverse(entries)
+  def replace(_log, entries), do: Enum.reverse(entries)
 
   @doc """
   Clear all entries from the log.
   """
-  def clear(log), do: []
+  def clear(_log), do: []
 end
