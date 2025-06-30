@@ -15,8 +15,7 @@ defmodule VsrTest do
     :ok = Vsr.connect(replica3, replica1)
     :ok = Vsr.connect(replica3, replica2)
 
-
-    :ok, replicas: [replica1, replica2, replica3]}
+    {:ok, replicas: [replica1, replica2, replica3]}
   end
 
   defp start_replica(_id) do
