@@ -19,7 +19,8 @@ defmodule VsrTest do
     kv1 = %VsrKv{vsr: replica1}
     kv2 = %VsrKv{vsr: replica2}
     kv3 = %VsrKv{vsr: replica3}
-     }}
+
+    {:ok, kv1: kv1, kv2: kv2, kv3: kv3, replicas: [replica1, replica2, replica3]}
   end
 
   defp start_replica(_id) do
