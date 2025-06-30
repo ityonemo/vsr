@@ -14,14 +14,14 @@ defprotocol Vsr.StateMachine do
   true if the operation must be linearizable.  If not, then
   the VSR replica will pick speed and use a stale read instead.
   """
-  def require_linearized?(state_machine, operation)
+  def _require_linearized?(state_machine, operation)
 
   @doc """
   true if the operation is read-only and does not change its
   state.  Read-only operations may be performed if the network
   does not have a quorum.
   """
-  def read_only?(state_machine, operation)
+  def _read_only?(state_machine, operation)
 
   @doc """
   Applies an operation to the state machine and returns the new state
@@ -31,19 +31,19 @@ defprotocol Vsr.StateMachine do
   - `new_state_machine` is the updated state machine
   - `result` is the operation result to return to the client
   """
-  def apply_operation(state_machine, operation)
+  def _apply_operation(state_machine, operation)
 
   @doc """
   Gets the current state of the state machine.
   Used for state transfer between replicas.
   """
-  def get_state(state_machine)
+  def _get_state(state_machine)
 
   @doc """
   Sets the state machine to a specific state.
   Used during state transfer from other replicas.
   """
-  def set_state(state_machine, new_state)
+  def _set_state(state_machine, new_state)
 after
   # generically, state machines must be initialized with a vsr instance.
   @callback new(vsr:: pid, options :: keyword) :: t

@@ -43,29 +43,30 @@ defmodule VsrKv do
   # internal API
 
   @impl Vsr.StateMachine
-  def new(vsr, _options), do: %__MODULE__{vsr: vsr}
+  def _new(vsr, _options), do: %__MODULE__{vsr: vsr}
 
   @impl Vsr.StateMachine
-  def require_linearized?(_, _), do: true
+  def _require_linearized?(_, _), do: true
 
   @impl Vsr.StateMachine
-  def read_only?(_, _), do: true
+  def _read_only?(_, command), do: elem(command, 0) == :fetch
 
   @impl Vsr.StateMachine
-  def apply_operation(kv, {:fetch, key}) do
+  def __apply_operation(kv, {:fetch, key}) do
     {kv, Map.fetch(kv.map, key)}
   end
 
-  def apply_operation(kv, {:put, key, value}) do
+  def __apply_operation(kv, {:put, key, value}) do
     {%{kv | map: Map.put(kv.map, key, value)}, :ok}
   end
 
-  def apply_operation(kv, {:delete, key}) do
+  def __apply_operation(kv, {:delete, key}) do
     {%{kv | map: Map.delete(kv.map, key)}, :ok}
   end
 
   @impl Vsr.StateMachine
-  def get_state(_), do: raise("not implemented")
+  def __get_state(_), do: raise("not implemented")
 
-  def set_state(_, _), do: raise("not implemented")
+  @impl Vsr.StateMachine
+  def __set_state(_, _), do: raise("not implemented")
 end

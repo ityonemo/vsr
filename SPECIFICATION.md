@@ -221,13 +221,13 @@ The VSR protocol is agnostic to the underlying state machine. Operations are app
 ```elixir
 defprotocol Vsr.StateMachine do
   @doc "Apply an operation to the state machine"
-  def apply_operation(state_machine, operation)
+  def _apply_operation(state_machine, operation)
   
   @doc "Get current state for state transfer"
-  def get_state(state_machine)
+  def _get_state(state_machine)
   
   @doc "Set state during state transfer"
-  def set_state(state_machine, state)
+  def _set_state(state_machine, state)
 end
 ```
 

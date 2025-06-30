@@ -116,8 +116,8 @@ defmodule Vsr do
 
   defp client_request_impl(operation, from, state) do
     has_quorum = quorum?(state)
-    requires_linearized = StateMachine.require_linearized?(state.state_machine, operation)
-    read_only = StateMachine.read_only?(state.state_machine, operation)
+    requires_linearized = StateMachine._require_linearized?(state.state_machine, operation)
+    read_only = StateMachine._read_only?(state.state_machine, operation)
 
     cond do
       requires_linearized and has_quorum ->
@@ -126,7 +126,7 @@ defmodule Vsr do
 
       read_only or not requires_linearized ->
         # do the read-only operation without the quorum.
-        {new_state_machine, reply} = StateMachine.apply_operation(state.state_machine, operation)
+        {new_state_machine, reply} = StateMachine._apply_operation(state.state_machine, operation)
         {:reply, {:ok, reply}, %{state | state_machine: new_state_machine}}
 
       :else ->
@@ -169,7 +169,7 @@ defmodule Vsr do
          state
        ) do
     # If read-only, we can reply immediately
-    {new_state_machine, reply} = StateMachine.apply_operation(state.state_machine, operation)
+    {new_state_machine, reply} = StateMachine._apply_operation(state.state_machine, operation)
     GenServer.reply(from, {:ok, reply})
     {:noreply, %{state | state_machine: new_state_machine}}
   end
@@ -339,7 +339,7 @@ defmodule Vsr do
     # Apply operations and collect results
     {final_state_machine, _results} =
       Enum.reduce(operations_to_commit, {state_machine, []}, fn entry, {sm, results} ->
-        {new_sm, result} = StateMachine.apply_operation(sm, entry.operation)
+        {new_sm, result} = StateMachine._apply_operation(sm, entry.operation)
 
         # Send reply to client if this is a client request
         if entry.sender_id do
@@ -516,7 +516,7 @@ defmodule Vsr do
       log: Log.get_all(state.log),
       op_number: state.op_number,
       commit_number: state.commit_number,
-      state_machine_state: StateMachine.get_state(state.state_machine)
+      state_machine_state: StateMachine._get_state(state.state_machine)
     }
 
     Message.vsr_send(get_state.sender, new_state_msg)
@@ -528,7 +528,7 @@ defmodule Vsr do
     if new_state.view >= state.view_number do
       # Update state with received information
       new_state_machine =
-        StateMachine.set_state(state.state_machine, new_state.state_machine_state)
+        StateMachine._set_state(state.state_machine, new_state.state_machine_state)
 
       updated_state = %{
         state
