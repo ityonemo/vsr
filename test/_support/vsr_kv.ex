@@ -8,7 +8,8 @@ defmodule VsrKv do
 
   # external API
 
-  def new(vsr, options) do
+  @impl Vsr.StateMachine
+  def new(vsr, _options) do
     %__MODULE__{vsr: vsr}
   end
 
