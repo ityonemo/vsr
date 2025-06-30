@@ -32,13 +32,16 @@ defmodule VsrTest do
 
   defp start_replica(id) do
     # Use empty list as initial log (list log implementation)
+    # Generate unique name to avoid conflicts between tests
+    unique_name = :"replica_#{id}_#{:erlang.unique_integer([:positive])}"
+
     start_supervised({
       Vsr,
       [
         log: [],
         state_machine: VsrKv.new(self(), []),
         cluster_size: 3,
-        name: :"replica_#{id}"
+        name: unique_name
       ]
     })
   end
