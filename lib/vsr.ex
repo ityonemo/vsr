@@ -76,7 +76,7 @@ defmodule Vsr do
       commit_number: 0,
       log: log,
       replicas: MapSet.new(),
-      state_machine: sm_mod.new(self(), sm_opts),
+      state_machine: sm_mod._new(self(), sm_opts),
       cluster_size: Keyword.fetch!(opts, :cluster_size),
       prepare_ok_count: %{},
       view_change_votes: %{},
