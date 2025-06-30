@@ -138,46 +138,60 @@ defmodule VsrTest do
     assert latest_entry.operation == {:put, "log_test", "log_value"}
   end
 
-  test "diagnostic: check quorum and primary", %{replicas: [replica1, replica2, replica3]} do\
-    # Check quorum status on each replica\
-    state1 = Vsr.dump(replica1)\
-    state2 = Vsr.dump(replica2)\
-    state3 = Vsr.dump(replica3)\
-\
-    IO.puts("Replica 1 - Connected: #{MapSet.size(state1.replicas)}, Cluster Size: #{state1.cluster_size}")\
-    IO.puts("Replica 2 - Connected: #{MapSet.size(state2.replicas)}, Cluster Size: #{state2.cluster_size}")\
-    IO.puts("Replica 3 - Connected: #{MapSet.size(state3.replicas)}, Cluster Size: #{state3.cluster_size}")\
-\
-    # Check which replica thinks it's primary\
-    IO.puts("Replica 1 PID: #{inspect(replica1)}, View: #{state1.view_number}")\
-    IO.puts("Replica 2 PID: #{inspect(replica2)}, View: #{state2.view_number}")\
-    IO.puts("Replica 3 PID: #{inspect(replica3)}, View: #{state3.view_number}")\
-\
-    # Basic assertions\
-    assert state1.cluster_size == 3\
-    assert state2.cluster_size == 3\
-    assert state3.cluster_size == 3\
-  end\
-\
-  test "diagnostic: manual client request", %{kv1: kv1, replicas: [replica1, _, _]} do\
-    initial_state = Vsr.dump(replica1)\
-    IO.puts("Before operation - Op number: #{initial_state.op_number}, Log length: #{length(initial_state.log)}")\
-\
-    # Try a manual client request\
-    result = VsrKv.put(kv1, "debug_key", "debug_value")\
-    IO.puts("Put result: #{inspect(result)}")\
-\
-    Process.sleep(100)\
-\
-    final_state = Vsr.dump(replica1)\
-    IO.puts("After operation - Op number: #{final_state.op_number}, Log length: #{length(final_state.log)}")\
-\
-    # Check if operation was logged\
-    if length(final_state.log) > 0 do\
-      [latest_entry | _] = final_state.log\
-      IO.puts("Latest log entry: #{inspect(latest_entry)}")\
-    end\
-  end\
+  test "diagnostic: check quorum and primary", %{replicas: [replica1, replica2, replica3]} do
+    # Check quorum status on each replica
+    state1 = Vsr.dump(replica1)
+    state2 = Vsr.dump(replica2)
+    state3 = Vsr.dump(replica3)
+
+    IO.puts(
+      "Replica 1 - Connected: #{MapSet.size(state1.replicas)}, Cluster Size: #{state1.cluster_size}"
+    )
+
+    IO.puts(
+      "Replica 2 - Connected: #{MapSet.size(state2.replicas)}, Cluster Size: #{state2.cluster_size}"
+    )
+
+    IO.puts(
+      "Replica 3 - Connected: #{MapSet.size(state3.replicas)}, Cluster Size: #{state3.cluster_size}"
+    )
+
+    # Check which replica thinks it's primary
+    IO.puts("Replica 1 PID: #{inspect(replica1)}, View: #{state1.view_number}")
+    IO.puts("Replica 2 PID: #{inspect(replica2)}, View: #{state2.view_number}")
+    IO.puts("Replica 3 PID: #{inspect(replica3)}, View: #{state3.view_number}")
+
+    # Basic assertions
+    assert state1.cluster_size == 3
+    assert state2.cluster_size == 3
+    assert state3.cluster_size == 3
+  end
+
+  test "diagnostic: manual client request", %{kv1: kv1, replicas: [replica1, _, _]} do
+    initial_state = Vsr.dump(replica1)
+
+    IO.puts(
+      "Before operation - Op number: #{initial_state.op_number}, Log length: #{length(initial_state.log)}"
+    )
+
+    # Try a manual client request
+    result = VsrKv.put(kv1, "debug_key", "debug_value")
+    IO.puts("Put result: #{inspect(result)}")
+
+    Process.sleep(100)
+
+    final_state = Vsr.dump(replica1)
+
+    IO.puts(
+      "After operation - Op number: #{final_state.op_number}, Log length: #{length(final_state.log)}"
+    )
+
+    # Check if operation was logged
+    if length(final_state.log) > 0 do
+      [latest_entry | _] = final_state.log
+      IO.puts("Latest log entry: #{inspect(latest_entry)}")
+    end
+  end
 
   test "replicas maintain connected state", %{replicas: [replica1, replica2, replica3]} do
     state1 = Vsr.dump(replica1)
