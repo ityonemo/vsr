@@ -255,7 +255,7 @@ defmodule Vsr do
     Message.vsr_send(primary_pid, %PrepareOk{
       view: prepare.view,
       op_number: prepare.op_number,
-      from: self()
+      replica_id: self()
     })
   end
 
