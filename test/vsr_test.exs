@@ -15,13 +15,10 @@ defmodule VsrTest do
     :ok = Vsr.connect(replica3, replica1)
     :ok = Vsr.connect(replica3, replica2)
 
-    # VsrKv instances are created by the VSR replicas themselves
-    {:ok,
-     %{
-       replicas: [replica1, replica2, replica3],
-       kv1: replica1,
-       kv2: replica2,
-       kv3: replica3
+    # Create VsrKv wrapper instances for each replica
+    kv1 = %VsrKv{vsr: replica1}
+    kv2 = %VsrKv{vsr: replica2}
+    kv3 = %VsrKv{vsr: replica3}
      }}
   end
 
