@@ -8,40 +8,34 @@ defmodule VsrKv do
 
   # external API
 
-  @impl Vsr.StateMachine
-  def new(vsr, _options) do
-    %__MODULE__{vsr: vsr}
+  def start_link(replica, options) do
+    VsrKv.start_link(replica, options ++ [state_machine: {__MODULE__, []}])
   end
 
-  def start_link(vsr, options) do
-    kv = VsrKv.new(vsr, options)
-    {:ok, kv}
+  def fetch(replica, key) do
+    Vsr.client_request(replica, {:fetch, key})
   end
 
-  def fetch(kv, key) do
-    Vsr.client_request(kv.vsr, {:fetch, key})
-  end
-
-  def fetch!(kv, key) do
-    case fetch(kv, key) do
+  def fetch!(replica, key) do
+    case fetch(replica, key) do
       {:ok, value} -> value
-      :error -> raise KeyError, term: kv, key: key
+      :error -> raise KeyError, term: replica, key: key
     end
   end
 
-  def get(kv, key, default \\ nil) do
-    case fetch(kv, key) do
+  def get(replica, key, default \\ nil) do
+    case fetch(replica, key) do
       {:ok, value} -> value
       :error -> default
     end
   end
 
-  def put(kv, key, value) do
-    Vsr.client_request(kv.vsr, {:put, key, value})
+  def put(replica, key, value) do
+    Vsr.client_request(replica, {:put, key, value})
   end
 
-  def delete(kv, key) do
-    Vsr.client_request(kv.vsr, {:delete, key})
+  def delete(replica, key) do
+    Vsr.client_request(replica, {:delete, key})
   end
 
   # internal API for protocol
