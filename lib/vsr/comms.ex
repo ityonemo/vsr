@@ -4,8 +4,10 @@ defmodule Vsr.Comms do
   """
 
   @type id :: any
+  @type from :: any
   @type filter :: (any -> boolean)
-  @callback send_to(id :: id, message :: term) :: term
+  @callback send_to(id, message :: term) :: term
+  @callback send_reply(from, message :: term) :: term
   @callback cluster() :: [id]
 end
 
@@ -29,8 +31,14 @@ defmodule Vsr.StdComms do
 
   @behaviour Vsr.Comms
 
+  @type id :: pid
+  @type from :: GenServer.from()
+
   @impl true
-  defdelegate send_to(id, message), to: Kernel, as: :send
+  defdelegate send_to(id, message), to: Vsr.Message, as: :vsr_send
+
+  @impl true
+  defdelegate send_reply(from, message), to: GenServer, as: :reply
 
   @filter Application.compile_env(:vsr, :cluster_filter, {__MODULE__, :cluster_filter, []})
   @name Application.compile_env(:vsr, :process_name, Vsr)
