@@ -31,6 +31,7 @@ defmodule Vsr do
     :prepare_ok_count,
     :view_change_votes,
     :last_normal_view,
+    :comms_module,
     primary_inactivity_timeout: 5000,
     view_change_timeout: 10_000,
     heartbeat_interval: 1000
@@ -42,11 +43,12 @@ defmodule Vsr do
           view_number: non_neg_integer(),
           op_number: non_neg_integer(),
           commit_number: non_neg_integer(),
-          replicas: MapSet.t(pid()),
+          replicas: MapSet.t(term()),
           state_machine: StateMachine.t(),
           prepare_ok_count: %{non_neg_integer() => non_neg_integer()},
           view_change_votes: map(),
           last_normal_view: non_neg_integer(),
+          comms_module: module(),
           primary_inactivity_timeout: non_neg_integer(),
           view_change_timeout: non_neg_integer(),
           heartbeat_interval: non_neg_integer()
@@ -59,31 +61,32 @@ defmodule Vsr do
     GenServer.start_link(__MODULE__, opts, server_opts)
   end
 
-  def init(opts) do
-    log = Keyword.fetch!(opts, :log)
-    state_machine_spec = Keyword.fetch!(opts, :state_machine)
+  @default_opts [
+    view_number: 0,
+    status: :normal,
+    op_number: 0,
+    commit_number: 0,
+    prepare_ok_count: %{},
+    view_change_votes: %{},
+    last_normal_view: 0,
+  ]
 
+  def init(opts) do
     {sm_mod, sm_opts} =
-      case state_machine_spec do
+      case Keyword.fetch!(opts, :state_machine) do
         {mod, opts} -> {mod, opts}
         mod when is_atom(mod) -> {mod, []}
       end
 
-    state = %__MODULE__{
-      view_number: 0,
-      status: :normal,
-      op_number: 0,
-      commit_number: 0,
-      log: log,
-      replicas: MapSet.new(),
-      state_machine: sm_mod._new(self(), sm_opts),
-      cluster_size: Keyword.fetch!(opts, :cluster_size),
-      prepare_ok_count: %{},
-      view_change_votes: %{},
-      last_normal_view: 0
-    }
+    comms_module = Keyword.get(opts, :comms_module, Vsr.Comms)
 
-    {:ok, state}
+    replicas = MapSet.new(comms_module.cluster())
+
+    @default_opts
+    |> Keyword.merge(opts)
+    |> Keyword.drop(~w[state_machine name]a)
+    |> Keyword.merge(state_machine: sm_mod._new(self(), sm_opts), replicas: replicas)
+    |> then(&{:ok, struct!(__MODULE__, &1)})
   end
 
   # Section 2: API
@@ -159,7 +162,7 @@ defmodule Vsr do
         # send the client request to the primary
         primary_pid = primary(state)
 
-        Message.vsr_send(primary_pid, %ClientRequest{
+        state.comms_module.send_to(primary_pid, %ClientRequest{
           operation: operation,
           from: from,
           read_only: read_only
@@ -176,7 +179,7 @@ defmodule Vsr do
        ) do
     # If read-only, we can reply immediately
     {new_state_machine, reply} = StateMachine._apply_operation(state.state_machine, operation)
-    GenServer.reply(from, {:ok, reply})
+    state.comms_module.send_reply(from, {:ok, reply})
     {:noreply, %{state | state_machine: new_state_machine}}
   end
 
@@ -190,7 +193,7 @@ defmodule Vsr do
 
     # Craft and send prepare message to all replicas
     prepare_msg = prepare_msg(new_state, from, operation)
-    Enum.each(new_state.replicas, &Message.vsr_send(&1, prepare_msg))
+    Enum.each(new_state.replicas, &state.comms_module.send_to(&1, prepare_msg))
 
     # Check if we have quorum immediately (for single replica or immediate majority)
     new_state = maybe_commit_operation(new_state, new_state.op_number)
@@ -265,7 +268,7 @@ defmodule Vsr do
   defp send_prepare_ok(state, prepare) do
     primary_pid = primary(state)
 
-    Message.vsr_send(primary_pid, %PrepareOk{
+    state.comms_module.send_to(primary_pid, %PrepareOk{
       view: prepare.view,
       op_number: prepare.op_number,
       replica: self()
@@ -314,7 +317,7 @@ defmodule Vsr do
         commit_number: new_commit_number
       }
 
-      Enum.each(state.replicas, &Message.vsr_send(&1, commit_message))
+      Enum.each(state.replicas, &state.comms_module.send_to(&1, commit_message))
 
       %{
         state
@@ -394,7 +397,7 @@ defmodule Vsr do
       }
 
       # Send acknowledgment
-      Message.vsr_send(start_view_change.replica, %StartViewChangeAck{
+      state.comms_module.send_to(start_view_change.replica, %StartViewChangeAck{
         view: start_view_change.view,
         replica: self()
       })
@@ -419,7 +422,7 @@ defmodule Vsr do
         # Enough votes, send DO-VIEW-CHANGE to new primary
         new_primary = primary_for_view(ack.view, state.replicas)
 
-        Message.vsr_send(new_primary, %DoViewChange{
+        state.comms_module.send_to(new_primary, %DoViewChange{
           view: ack.view,
           log: Log.get_all(state.log),
           last_normal_view: state.last_normal_view,
@@ -467,7 +470,7 @@ defmodule Vsr do
         commit_number: new_state.commit_number
       }
 
-      Enum.each(state.replicas, &Message.vsr_send(&1, start_view_msg))
+      Enum.each(state.replicas, &state.comms_module.send_to(&1, start_view_msg))
 
       {:noreply, new_state}
     else
@@ -491,7 +494,7 @@ defmodule Vsr do
       # Send VIEW-CHANGE-OK to new primary
       new_primary = primary_for_view(start_view.view, state.replicas)
 
-      Message.vsr_send(new_primary, %ViewChangeOk{
+      state.comms_module.send_to(new_primary, %ViewChangeOk{
         view: start_view.view,
         from: self()
       })
@@ -523,7 +526,7 @@ defmodule Vsr do
       state_machine_state: StateMachine._get_state(state.state_machine)
     }
 
-    Message.vsr_send(get_state.sender, new_state_msg)
+    state.comms_module.send_to(get_state.sender, new_state_msg)
 
     {:noreply, state}
   end
