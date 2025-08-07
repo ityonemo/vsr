@@ -60,7 +60,7 @@ result = VsrKv.get(replica, "key")  # Returns "value"
 mix test
 ```
 
-**Test Status**: 26/27 tests passing (write deduplication test skipped - see limitations above)
+**Test Status**: 35/35 tests passing (3 skipped - write deduplication and edge cases documented above)
 
 ## Architecture
 
