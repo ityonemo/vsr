@@ -3,7 +3,6 @@ defmodule Vsr do
   require Logger
   alias Vsr.Log
   alias Vsr.Log.Entry
-  alias Vsr.Message
   alias Vsr.Message.ClientRequest
   alias Vsr.Message.Prepare
   alias Vsr.Message.PrepareOk
@@ -32,6 +31,9 @@ defmodule Vsr do
     :view_change_votes,
     :last_normal_view,
     :comms_module,
+    :client_table,
+    :heartbeat_timer_ref,
+    :primary_inactivity_timer_ref,
     primary_inactivity_timeout: 5000,
     view_change_timeout: 10_000,
     heartbeat_interval: 1000
@@ -49,6 +51,7 @@ defmodule Vsr do
           view_change_votes: map(),
           last_normal_view: non_neg_integer(),
           comms_module: module(),
+          client_table: %{{pid(), reference()} => term()},
           primary_inactivity_timeout: non_neg_integer(),
           view_change_timeout: non_neg_integer(),
           heartbeat_interval: non_neg_integer()
@@ -69,6 +72,8 @@ defmodule Vsr do
     prepare_ok_count: %{},
     view_change_votes: %{},
     last_normal_view: 0,
+    comms_module: Vsr.StdComms,
+    client_table: %{}
   ]
 
   def init(opts) do
@@ -78,15 +83,22 @@ defmodule Vsr do
         mod when is_atom(mod) -> {mod, []}
       end
 
-    comms_module = Keyword.get(opts, :comms_module, Vsr.Comms)
-
-    replicas = MapSet.new(comms_module.cluster())
-
-    @default_opts
+    initial_state = @default_opts
     |> Keyword.merge(opts)
     |> Keyword.drop(~w[state_machine name]a)
-    |> Keyword.merge(state_machine: sm_mod._new(self(), sm_opts), replicas: replicas)
-    |> then(&{:ok, struct!(__MODULE__, &1)})
+    |> then(
+      &Keyword.merge(&1, replicas: new_replicas(&1), state_machine: sm_mod._new(self(), sm_opts))
+    )
+    |> then(&struct!(__MODULE__, &1))
+    
+    # Start timers
+    state_with_timers = start_timers(initial_state)
+    
+    {:ok, state_with_timers}
+  end
+
+  defp new_replicas(opts) do
+    MapSet.new(opts[:comms_module].cluster())
   end
 
   # Section 2: API
@@ -103,7 +115,7 @@ defmodule Vsr do
 
   defp connect_impl(target_replica_pid, _from, state) do
     # Monitor the target replica
-    Process.monitor(target_replica_pid)
+    state.comms_module.monitor(target_replica_pid)
 
     # Add to connected replicas
     new_replicas = MapSet.put(state.replicas, target_replica_pid)
@@ -144,6 +156,68 @@ defmodule Vsr do
     end
   end
 
+  defp client_request_with_id_impl(operation, client_pid, request_id, from, state) do
+    client_key = {client_pid, request_id}
+    
+    case Map.fetch(state.client_table, client_key) do
+      {:ok, cached_result} ->
+        # Request already processed - return cached result
+        {:reply, {:ok, cached_result}, state}
+        
+      :error ->
+        # New request - process it and cache result
+        has_quorum = quorum?(state)
+        requires_linearized = StateMachine._require_linearized?(state.state_machine, operation)
+        read_only = StateMachine._read_only?(state.state_machine, operation)
+
+        cond do
+          requires_linearized and has_quorum ->
+            # Process linearized operation with deduplication
+            client_request_linearized_with_dedup(read_only, operation, client_key, from, state)
+
+          read_only or not requires_linearized ->
+            # Process read-only operation and cache result
+            {new_state_machine, reply} = StateMachine._apply_operation(state.state_machine, operation)
+            new_client_table = Map.put(state.client_table, client_key, reply)
+            
+            {:reply, {:ok, reply}, %{state | state_machine: new_state_machine, client_table: new_client_table}}
+
+          :else ->
+            {:reply, {:error, :quorum}, state}
+        end
+    end
+  end
+
+  defp client_request_linearized_with_dedup(read_only, operation, client_key, from, state) do
+    is_primary = primary?(state)
+
+    cond do
+      state.status != :normal ->
+        {:reply, {:error, :not_normal}, state}
+
+      is_primary ->
+        # For deduplication, we need to modify the ClientRequest to include the client_key
+        # so it can be cached when the operation completes
+        client_request_impl(
+          %ClientRequest{operation: operation, from: from, read_only: read_only, client_key: client_key},
+          state
+        )
+
+      :else ->
+        # Send to primary with client_key for deduplication
+        primary_pid = primary(state)
+
+        state.comms_module.send_to(primary_pid, %ClientRequest{
+          operation: operation,
+          from: from,
+          read_only: read_only,
+          client_key: client_key
+        })
+
+        {:noreply, state}
+    end
+  end
+
   defp client_request_linearized(read_only, operation, from, state) do
     is_primary = primary?(state)
 
@@ -174,10 +248,27 @@ defmodule Vsr do
 
   # client request.  Received by the primary replica.
   defp client_request_impl(
+         %ClientRequest{operation: operation, from: from, read_only: true, client_key: client_key},
+         state
+       ) do
+    # If read-only with client_key, cache the result for deduplication
+    {new_state_machine, reply} = StateMachine._apply_operation(state.state_machine, operation)
+    state.comms_module.send_reply(from, {:ok, reply})
+    
+    new_client_table = if client_key do
+      Map.put(state.client_table, client_key, reply)
+    else
+      state.client_table
+    end
+    
+    {:noreply, %{state | state_machine: new_state_machine, client_table: new_client_table}}
+  end
+
+  defp client_request_impl(
          %ClientRequest{operation: operation, from: from, read_only: true},
          state
        ) do
-    # If read-only, we can reply immediately
+    # If read-only without client_key (legacy path)
     {new_state_machine, reply} = StateMachine._apply_operation(state.state_machine, operation)
     state.comms_module.send_reply(from, {:ok, reply})
     {:noreply, %{state | state_machine: new_state_machine}}
@@ -228,40 +319,61 @@ defmodule Vsr do
   # prepare message.  Received by non-primary replicas.
   defp prepare_impl(prepare, state) do
     # - Validates `view >= view_number`
-    # - If `op_number > length(log)`: append operation to `log`
+    # - If `op_number == log_length + 1`: append operation to `log` 
     # - Update `op_number = max(op_number, received_op_number)`
     # - Send `PREPARE-OK(view, op-num, replica-id)` to primary
 
-    with {:view, view} when view >= state.view_number <- {:view, prepare.view},
-         log_length = Log.length(state.log),
-         {:op, op} when op > log_length <- {:op, prepare.op_number} do
-      entry = %Entry{
-        view: view,
-        op_number: op,
-        operation: prepare.operation,
-        sender_id: prepare.from
-      }
+    # Reset primary inactivity timer since we got a message from primary
+    state = reset_primary_inactivity_timer(state)
 
-      new_state =
-        state
-        |> Map.update!(:log, &Log.append(&1, entry))
-        |> Map.replace(:op_number, prepare.op_number)
+    if prepare.view >= state.view_number do
+      log_length = Log.length(state.log)
+      
+      cond do
+        prepare.op_number == log_length + 1 ->
+          # Sequential operation - append to log
+          entry = %Entry{
+            view: prepare.view,
+            op_number: prepare.op_number,
+            operation: prepare.operation,
+            sender_id: prepare.from
+          }
 
-      send_prepare_ok(new_state, prepare)
+          new_state =
+            state
+            |> Map.update!(:log, &Log.append(&1, entry))
+            |> Map.replace(:op_number, prepare.op_number)
 
-      {:noreply, new_state}
+          send_prepare_ok(new_state, prepare)
+          {:noreply, new_state}
+
+        prepare.op_number <= log_length ->
+          # Already have this operation - just respond with ok
+          send_prepare_ok(state, prepare)
+          {:noreply, state}
+
+        prepare.op_number > log_length + 1 ->
+          # Gap detected - trigger state transfer
+          Logger.warning(
+            "Gap detected: received op #{prepare.op_number}, expected #{log_length + 1}. Triggering state transfer."
+          )
+          
+          primary_pid = primary(state)
+          get_state_msg = %GetState{
+            view: state.view_number,
+            op_number: state.op_number,
+            sender: self()
+          }
+          
+          state.comms_module.send_to(primary_pid, get_state_msg)
+          {:noreply, state}
+      end
     else
-      {:op, _} ->
-        # do nothing, we already have the operation but respond with ok.
-        send_prepare_ok(state, prepare)
-        {:noreply, state}
-
-      {:view, _} ->
-        Logger.warning(
-          "Received prepare with old view #{prepare.view}, current view #{state.view_number}"
-        )
-
-        {:noreply, state}
+      # Old view - ignore
+      Logger.warning(
+        "Received prepare with old view #{prepare.view}, current view #{state.view_number}"
+      )
+      {:noreply, state}
     end
   end
 
@@ -293,10 +405,11 @@ defmodule Vsr do
   defp maybe_commit_operation(state, op_number) do
     current_count = Map.get(state.prepare_ok_count, op_number, 0)
     # +1 for self (primary)
-    replica_count = MapSet.size(state.replicas) + 1
-
-    # Check if we have majority
-    if current_count > div(replica_count, 2) do
+    connected_replicas = MapSet.size(state.replicas) + 1
+    
+    # Check if we have majority of CONNECTED replicas for consensus
+    # But only if we have quorum of the total cluster for availability
+    if quorum?(state) and current_count > div(connected_replicas, 2) do
       # Majority received, commit operation and send commit messages
       new_commit_number = max(state.commit_number, op_number)
 
@@ -319,10 +432,17 @@ defmodule Vsr do
 
       Enum.each(state.replicas, &state.comms_module.send_to(&1, commit_message))
 
+      # Clean up prepare_ok_count for committed operations
+      cleaned_prepare_ok_count = 
+        state.prepare_ok_count
+        |> Enum.reject(fn {op_num, _count} -> op_num <= new_commit_number end)
+        |> Map.new()
+
       %{
         state
         | commit_number: new_commit_number,
-          state_machine: new_state_machine
+          state_machine: new_state_machine,
+          prepare_ok_count: cleaned_prepare_ok_count
       }
     else
       state
@@ -360,6 +480,9 @@ defmodule Vsr do
   end
 
   defp commit_impl(commit, state) do
+    # Reset primary inactivity timer since we got a message from primary
+    state = reset_primary_inactivity_timer(state)
+    
     if commit.view == state.view_number and commit.commit_number > state.commit_number do
       # Apply all operations up to commit point
       log_entries = Log.get_all(state.log)
@@ -372,10 +495,17 @@ defmodule Vsr do
           commit.commit_number
         )
 
+      # Clean up prepare_ok_count for committed operations
+      cleaned_prepare_ok_count = 
+        state.prepare_ok_count
+        |> Enum.reject(fn {op_num, _count} -> op_num <= commit.commit_number end)
+        |> Map.new()
+
       new_state = %{
         state
         | commit_number: commit.commit_number,
-          state_machine: new_state_machine
+          state_machine: new_state_machine,
+          prepare_ok_count: cleaned_prepare_ok_count
       }
 
       {:noreply, new_state}
@@ -396,11 +526,15 @@ defmodule Vsr do
           last_normal_view: state.view_number
       }
 
-      # Send acknowledgment
-      state.comms_module.send_to(start_view_change.replica, %StartViewChangeAck{
+      # Broadcast START-VIEW-CHANGE-ACK to ALL replicas (including self)
+      ack_msg = %StartViewChangeAck{
         view: start_view_change.view,
         replica: self()
-      })
+      }
+      
+      Enum.each(state.replicas, &state.comms_module.send_to(&1, ack_msg))
+      # Also send to self
+      GenServer.cast(self(), {:vsr, ack_msg})
 
       {:noreply, new_state}
     else
@@ -410,16 +544,26 @@ defmodule Vsr do
 
   defp start_view_change_ack_impl(ack, state) do
     if ack.view == state.view_number and state.status == :view_change do
-      # Count view change votes
-      votes = Map.update(state.view_change_votes, ack.view, [ack.replica], &[ack.replica | &1])
+      # Count view change votes, ensuring no duplicates
+      existing_votes = Map.get(state.view_change_votes, ack.view, [])
+      
+      # Only add if not already in the list
+      updated_votes = if ack.replica in existing_votes do
+        existing_votes
+      else
+        [ack.replica | existing_votes]
+      end
+      
+      votes = Map.put(state.view_change_votes, ack.view, updated_votes)
       new_state = %{state | view_change_votes: votes}
 
-      # Check if we have enough votes to proceed
-      vote_count = length(Map.get(votes, ack.view, []))
-      total_replicas = MapSet.size(state.replicas) + 1
+      # Check if we have enough votes to proceed from connected replicas
+      vote_count = length(updated_votes)
+      connected_replicas = MapSet.size(state.replicas) + 1
 
-      if vote_count > div(total_replicas, 2) do
-        # Enough votes, send DO-VIEW-CHANGE to new primary
+      # Only send DO-VIEW-CHANGE once when we first reach majority
+      if vote_count > div(connected_replicas, 2) and length(existing_votes) <= div(connected_replicas, 2) do
+        # Just reached enough votes, send DO-VIEW-CHANGE to new primary
         new_primary = primary_for_view(ack.view, state.replicas)
 
         state.comms_module.send_to(new_primary, %DoViewChange{
@@ -443,36 +587,63 @@ defmodule Vsr do
   defp do_view_change_impl(do_view_change, state) do
     if primary?(state) and do_view_change.view == state.view_number and
          state.status == :view_change do
-      # Collect view change data and update log if necessary
-      current_log = Log.get_all(state.log)
-      received_log = do_view_change.log
+      
+      # Collect DO-VIEW-CHANGE messages - we need majority before proceeding
+      do_view_change_key = "do_view_change_#{do_view_change.view}"
+      existing_messages = Map.get(state.view_change_votes, do_view_change_key, [])
+      
+      # Add this message if not already received from this replica
+      updated_messages = if do_view_change.from in existing_messages do
+        existing_messages
+      else
+        [do_view_change.from | existing_messages]
+      end
+      
+      new_votes = Map.put(state.view_change_votes, do_view_change_key, updated_messages)
+      new_state = %{state | view_change_votes: new_votes}
+      
+      # Check if we have majority of DO-VIEW-CHANGE messages
+      connected_replicas = MapSet.size(state.replicas) + 1
+      
+      if length(updated_messages) > div(connected_replicas, 2) do
+        
+        # Collect view change data and update log if necessary
+        current_log = Log.get_all(state.log)
+        received_log = do_view_change.log
 
-      # Use the log with higher op_number or more recent view
-      new_log =
-        if do_view_change.op_number > state.op_number do
-          received_log
-        else
-          current_log
-        end
+        # Use the log with higher op_number or more recent view
+        merged_log =
+          if do_view_change.op_number > state.op_number do
+            received_log
+          else
+            current_log
+          end
 
-      new_state = %{
-        state
-        | log: Log.replace(state.log, new_log),
-          op_number: max(state.op_number, do_view_change.op_number),
-          commit_number: max(state.commit_number, do_view_change.commit_number)
-      }
+        merged_state = %{
+          new_state
+          | log: Log.replace(state.log, merged_log),
+            op_number: max(state.op_number, do_view_change.op_number),
+            commit_number: max(state.commit_number, do_view_change.commit_number),
+            status: :normal  # Primary transitions to normal
+        }
 
-      # Send START-VIEW to all replicas
-      start_view_msg = %StartView{
-        view: state.view_number,
-        log: Log.get_all(new_state.log),
-        op_number: new_state.op_number,
-        commit_number: new_state.commit_number
-      }
+        # Send START-VIEW to all replicas
+        start_view_msg = %StartView{
+          view: state.view_number,
+          log: Log.get_all(merged_state.log),
+          op_number: merged_state.op_number,
+          commit_number: merged_state.commit_number
+        }
 
-      Enum.each(state.replicas, &state.comms_module.send_to(&1, start_view_msg))
+        Enum.each(state.replicas, &state.comms_module.send_to(&1, start_view_msg))
+        
+        # Restart timers since we're now primary
+        final_state = start_timers(merged_state)
 
-      {:noreply, new_state}
+        {:noreply, final_state}
+      else
+        {:noreply, new_state}
+      end
     else
       {:noreply, state}
     end
@@ -555,8 +726,9 @@ defmodule Vsr do
   # Control Message Implementations
 
   defp heartbeat_impl(_heartbeat, state) do
-    # Heartbeat received, replica is alive
-    {:noreply, state}
+    # Heartbeat received, replica is alive - reset inactivity timer
+    new_state = reset_primary_inactivity_timer(state)
+    {:noreply, new_state}
   end
 
   def start_view_change(pid), do: GenServer.cast(pid, :start_view_change)
@@ -605,6 +777,57 @@ defmodule Vsr do
 
   defp increment_op_number(state), do: Map.update!(state, :op_number, &(&1 + 1))
 
+  # Timer management functions
+  defp start_timers(state) do
+    # Start heartbeat timer if we're primary
+    heartbeat_ref = if primary?(state) do
+      Process.send_after(self(), :heartbeat_tick, state.heartbeat_interval)
+    else
+      nil
+    end
+    
+    # Start primary inactivity timer if we're backup
+    inactivity_ref = if not primary?(state) do
+      Process.send_after(self(), :primary_inactivity_timeout, state.primary_inactivity_timeout)
+    else
+      nil
+    end
+    
+    %{state | heartbeat_timer_ref: heartbeat_ref, primary_inactivity_timer_ref: inactivity_ref}
+  end
+  
+  defp reset_primary_inactivity_timer(state) do
+    # Cancel existing timer
+    if state.primary_inactivity_timer_ref do
+      Process.cancel_timer(state.primary_inactivity_timer_ref)
+    end
+    
+    # Start new timer if we're backup
+    new_ref = if not primary?(state) do
+      Process.send_after(self(), :primary_inactivity_timeout, state.primary_inactivity_timeout)
+    else
+      nil
+    end
+    
+    %{state | primary_inactivity_timer_ref: new_ref}
+  end
+  
+  defp start_heartbeat_timer(state) do
+    # Cancel existing timer
+    if state.heartbeat_timer_ref do
+      Process.cancel_timer(state.heartbeat_timer_ref)
+    end
+    
+    # Start new timer if we're primary
+    new_ref = if primary?(state) do
+      Process.send_after(self(), :heartbeat_tick, state.heartbeat_interval)
+    else
+      nil
+    end
+    
+    %{state | heartbeat_timer_ref: new_ref}
+  end
+
   # Section 4: Router
 
   def handle_call(:dump, from, state), do: dump_impl(from, state)
@@ -613,6 +836,9 @@ defmodule Vsr do
 
   def handle_call({:client_request, operation}, from, state),
     do: client_request_impl(operation, from, state)
+
+  def handle_call({:client_request_with_id, operation, client_pid, request_id}, from, state),
+    do: client_request_with_id_impl(operation, client_pid, request_id, from, state)
 
   def handle_cast({:vsr, %type{} = msg}, state) do
     case type do
@@ -631,6 +857,53 @@ defmodule Vsr do
     end
   end
 
+  def handle_cast(:start_view_change, state) do
+    # Manually triggered view change (e.g., from timeout or API call)
+    start_manual_view_change(state)
+  end
+
+  defp start_manual_view_change(state) do
+    # Increment view and transition to view change status
+    new_view = state.view_number + 1
+    
+    # Create and broadcast START-VIEW-CHANGE message
+    start_view_change_msg = %StartViewChange{
+      view: new_view,
+      replica: self()
+    }
+    
+    # Send to all replicas (including self for consistency)
+    Enum.each(state.replicas, &state.comms_module.send_to(&1, start_view_change_msg))
+    
+    # Also send to self to process it
+    GenServer.cast(self(), {:vsr, start_view_change_msg})
+    
+    {:noreply, state}
+  end
+
   def handle_info({:DOWN, ref, :process, pid, _reason}, state),
     do: disconnect_impl(ref, pid, state)
+
+  def handle_info(:heartbeat_tick, state) do
+    # Primary sends heartbeats to all replicas
+    if primary?(state) do
+      heartbeat_msg = %Heartbeat{}
+      Enum.each(state.replicas, &state.comms_module.send_to(&1, heartbeat_msg))
+      
+      # Restart heartbeat timer
+      new_state = start_heartbeat_timer(state)
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info(:primary_inactivity_timeout, state) do
+    # Backup detected primary inactivity - trigger view change
+    if not primary?(state) and state.status == :normal do
+      start_manual_view_change(state)
+    else
+      {:noreply, state}
+    end
+  end
 end
