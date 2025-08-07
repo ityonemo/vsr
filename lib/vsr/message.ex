@@ -62,7 +62,7 @@ defmodule Vsr.Message do
   # Client Messages
   defmodule ClientRequest do
     @moduledoc "Client request message"
-    defstruct [:operation, :from, :read_only]
+    defstruct [:operation, :from, :read_only, :client_key]
   end
 
   # CLIENT-REPLY is ignored since we can directly reply over erlang message bus.

@@ -9,6 +9,7 @@ defmodule Vsr.Comms do
   @callback send_to(id, message :: term) :: term
   @callback send_reply(from, message :: term) :: term
   @callback cluster() :: [id]
+  @callback monitor(id) :: reference
 end
 
 defmodule Vsr.StdComms do
@@ -62,4 +63,7 @@ defmodule Vsr.StdComms do
   end
 
   def cluster_filter(_), do: true
+
+  @impl true
+  defdelegate monitor(id), to: Process
 end
