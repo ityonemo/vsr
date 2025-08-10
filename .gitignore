@@ -1,2 +1,13 @@
 _build/
 deps/
+
+# Maelstrom toolkit
+maelstrom.jar
+/maelstrom/
+store/
+
+# DETS files  
+*.dets
+
+# Logs
+*.log

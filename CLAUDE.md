@@ -61,6 +61,18 @@ end
 - **Uppercase with underscores**: `@DEFAULT_OPTS`, `@FILTER`
 - **Module attributes**: Use `@` for compile-time constants
 
+### Module Aliases
+- **Individual alias statements**: Use separate `alias` statements for each module in source files
+- **❌ Avoid multi-module aliases in source code**: `alias Module.{A, B, C}`
+- **✅ Use individual aliases in source files**: 
+  ```elixir
+  alias Module.A
+  alias Module.B
+  alias Module.C
+  ```
+- **✅ Exception**: Bracketed aliases are acceptable for command-line usage (IEx, `elixir -e "..."`)
+- **Reason**: Individual aliases are clearer, easier to grep, and avoid merge conflicts in source files
+
 ## Function Patterns
 
 ### Function Definitions
@@ -120,10 +132,15 @@ defp validate_prepare(prepare, state) do
 end
 ```
 
-## Protocol Implementation
+## Protocol Implementation with Protoss
 
-### Protocol Definition
+### Understanding Protoss Framework
+**CRITICAL**: VSR uses the Protoss framework for colocated protocol implementations. This is NOT standard Elixir protocols or behaviours.
+
+### Protoss Protocol Definition
 ```elixir
+use Protoss  # MUST be at the top of protocol files
+
 defprotocol Vsr.ProtocolName do
   @moduledoc """
   Clear protocol documentation explaining purpose.
@@ -133,22 +150,117 @@ defprotocol Vsr.ProtocolName do
   Function documentation with expected behavior.
   """
   def callback_name(implementer, args)
+after
+  # Protoss callback specification (like @behaviour)
+  @callback _new(vsr :: term, options :: keyword) :: t
 end
 ```
 
-### Protocol Implementation
+### Protoss Protocol Implementation
 ```elixir
 defmodule MyImplementation do
-  use Vsr.ProtocolName  # Use the protocol
+  use Vsr.ProtocolName  # Use the Protoss protocol (NOT defimpl!)
   
-  @impl Vsr.ProtocolName
+  # Implementation callbacks - these are called by Protoss
+  def _new(vsr_instance, opts) do
+    # Initialize the implementation
+    %__MODULE__{...}
+  end
+  
+  # Protocol function implementations
   def callback_name(implementer, args) do
     # implementation
   end
 end
 ```
 
-### Behaviour Implementation
+### Key Protoss Patterns
+
+#### State Machine Implementation
+```elixir
+defmodule MyStateMachine do
+  use Vsr.StateMachine  # Use Protoss protocol
+  
+  def _new(_vsr_pid, _opts), do: %__MODULE__{state: %{}}
+  def _apply_operation(sm, op), do: {new_sm, result}  
+  def _read_only?(_sm, _op), do: false
+  def _require_linearized?(_sm, _op), do: true
+  def _get_state(sm), do: sm.state
+  def _set_state(sm, new_state), do: %{sm | state: new_state}
+end
+```
+
+#### Log Implementation  
+```elixir
+defmodule MyLog do
+  use Vsr.Log  # Use Protoss protocol
+  
+  def _new(node_id, opts), do: %__MODULE__{...}
+  def append(log, entry), do: updated_log
+  def fetch(log, op_number), do: {:ok, entry} | {:error, :not_found}
+  def get_all(log), do: [entries...]
+  def get_from(log, op_number), do: [entries...]  
+  def length(log), do: integer()
+  def replace(log, entries), do: updated_log
+  def clear(log), do: cleared_log
+end
+```
+
+### Protoss vs Standard Elixir Protocols
+
+#### WRONG - Standard Elixir Protocol
+```elixir
+defimpl Vsr.Log, for: MyLog do
+  def append(log, entry), do: ...
+end
+```
+
+#### CORRECT - Protoss Protocol
+```elixir
+defmodule MyLog do
+  use Vsr.Log  # This is the Protoss way
+  
+  def append(log, entry), do: ...
+end
+```
+
+### VSR Initialization Patterns
+
+#### Using Protoss Specs (Recommended)
+```elixir
+# VSR will call Module._new(args...) via Protoss
+vsr_opts = [
+  log: {MyLog, [node_id, [dets_file: "log.dets"]]},
+  state_machine: {MyStateMachine, []}
+]
+```
+
+#### Direct Instance (When Needed)
+```elixir
+# Only use this when you need to pre-configure the instance
+log = MyLog._new(node_id, [dets_file: "log.dets"])
+vsr_opts = [log: log, ...]
+```
+
+### Common Protoss Mistakes to Avoid
+
+1. **Using `defimpl` instead of `use`**
+   - ❌ `defimpl Vsr.Log, for: MyLog`
+   - ✅ `defmodule MyLog do use Vsr.Log`
+
+2. **Missing `_new` callback**
+   - ❌ No `_new` function defined
+   - ✅ `def _new(args...), do: %__MODULE__{...}`
+
+3. **Wrong initialization pattern**
+   - ❌ `MyLog.new(args...)`  
+   - ✅ `MyLog._new(args...)` or `{MyLog, [args...]}`
+
+4. **Mixing standard protocols with Protoss**
+   - ❌ Using both `use` and `defimpl` for same protocol
+   - ✅ Use only `use` for Protoss protocols
+
+### Behaviour Implementation (Non-Protoss)
 ```elixir
 defmodule MyBehaviour do
   @behaviour Vsr.BehaviourName
@@ -234,6 +346,7 @@ end
 - **Avoid hardcoded delays**: Use proper synchronization mechanisms
 - **Test error cases**: Include tests for both success and failure paths
 - **Diagnostic tests**: Include tests that help debug complex distributed scenarios
+- **NEVER use GenServer.* functions in tests**: Tests should only use the public API functions provided by modules, not internal GenServer functions like `GenServer.call`, `GenServer.cast`, `GenServer.reply`, etc.
 
 ### Test Configuration
 ```elixir
@@ -310,5 +423,161 @@ end
 - Minimize external dependencies
 - Use only well-maintained, stable libraries
 - Document any new dependency requirements
+
+## Maelstrom Integration Guidelines
+
+### Key Architectural Principles
+
+1. **Durability Strategy**: Log is durable (DETS), state machine is in-memory cache
+   - ❌ Making state machine persistent with DETS  
+   - ✅ DETS log + in-memory state machine that can be reconstructed from log
+
+2. **Node Communication**: Maelstrom uses string node IDs, not Erlang PIDs
+   - ❌ Using PIDs for dest_pid in communications
+   - ✅ Using string node IDs like "n1", "n2", "n3" 
+
+3. **JSON Protocol**: Use built-in `JSON` module, not external libraries
+   - ❌ `{:jason, "~> 1.0"}` or other JSON libraries
+   - ✅ Built-in `JSON.encode!/1` and `JSON.decode/1`
+
+### Environment Configuration
+```elixir
+# mix.exs - Maelstrom environment setup
+def elixirc_paths(:maelstrom), do: ["lib", "maelstrom", "test/_support"]
+def elixirc_paths(:test), do: ["lib", "test/_support", "maelstrom"]
+
+def application do
+  case Mix.env() do
+    :maelstrom -> [extra_applications: [:logger], mod: {Maelstrom.Application, []}]
+    _ -> [extra_applications: [:logger]]
+  end
+end
+```
+
+### Testing Command Patterns
+```bash
+# Use these exact commands for testing Maelstrom integration
+MIX_ENV=maelstrom elixir simple_test.exs
+MIX_ENV=maelstrom elixir debug_test.exs
+```
+
+### Common Maelstrom Mistakes to Avoid
+
+1. **Wrapper Pattern Overuse**
+   - ❌ Creating wrapper modules when not needed
+   - ✅ Use wrappers only when you need to adapt interfaces (e.g., PID vs string node_id)
+
+2. **Wrong Persistence Layer**
+   - ❌ Persisting state machine state directly 
+   - ✅ Persist operations in log, reconstruct state from log
+
+3. **Communication Assumptions**
+   - ❌ Assuming Erlang distribution is available
+   - ✅ Use Maelstrom's JSON protocol over STDIN/STDOUT
+
+4. **Environment Mixing**
+   - ❌ Loading wrong modules for different environments
+   - ✅ Proper `elixirc_paths` configuration for each environment
+
+### VSR + Maelstrom Integration Pattern
+```elixir
+# Correct Maelstrom VSR setup
+vsr_opts = [
+  log: {Maelstrom.DetsLog, [node_id, [dets_file: "#{node_id}_log.dets"]]},
+  state_machine: {Maelstrom.Kv, []},  # Simple in-memory state machine
+  cluster_size: length(node_ids),
+  comms_module: Maelstrom.Comms
+]
+```
+
+## Debugging and Error Analysis Guidelines
+
+### Understanding Error Messages
+
+1. **Language Context in Error Messages**
+   - ❌ Assuming `{:body {}}` is Elixir tuple syntax
+   - ✅ Recognize `{:body {}}` is **Clojure** syntax from Maelstrom's Java process
+   - **Key insight**: Error messages may come from different languages in the stack
+
+2. **Maelstrom Error Interpretation**
+   ```
+   Malformed network message. Node n0 tried to send the following message via STDOUT:
+   {:body {}}
+   This is malformed because: {:src missing-required-key, :dest missing-required-key}
+   ```
+   - **Meaning**: Our VSR node sent an empty/incomplete message to Maelstrom
+   - **Not**: Elixir code outputting tuples to stdout
+   - **Cause**: Message construction failure, empty maps, or process crashes during send
+
+3. **Stdout vs Stderr Confusion**
+   - ❌ Debugging stdout issues by adding more stdout logging
+   - ✅ Use Logger (goes to stderr) to debug stdout JSON messages
+   - **Key insight**: Maelstrom reads structured JSON from stdout, logs go to stderr
+
+### Systematic Debugging Approach
+
+1. **Start Simple, Build Complexity**
+   - ❌ Jump to complex scenarios when basic communication fails
+   - ✅ Test basic echo/init messages first before VSR integration
+   - **Rule**: If init fails, don't test VSR operations
+
+2. **Isolate the Problem Layer**
+   - ❌ Assume the problem is in the most recently changed code
+   - ✅ Consider all layers: JSON encoding, message construction, protocol handling
+   - **Process**: 
+     1. Test message construction in isolation
+     2. Test JSON encoding/decoding
+     3. Test protocol message flow
+     4. Test VSR integration
+
+3. **Let it crash**
+  avoid try/do blocks, and just let it crash instead of coding defensively.
+
+### Common Debugging Mistakes
+
+1. **Expensive Trial-and-Error Loops**
+   - ❌ Making multiple changes without understanding the root cause
+   - ❌ Adding debug code that interferes with the actual protocol
+   - ✅ Make minimal, targeted changes to isolate the issue
+   - ✅ Use proper debugging tools (Logger to stderr, not stdout)
+
+2. **Misinterpreting Cross-Language Error Messages**
+   - ❌ Thinking Clojure error syntax indicates Elixir code problems
+   - ✅ Understand which process/language generated the error message
+   - **Tool**: Check process boundaries - Java/Clojure (Maelstrom) vs Elixir (VSR)
+
+3. **Debugging the Wrong Layer**
+   - ❌ Debugging VSR logic when the problem is in basic JSON communication
+   - ✅ Start with the simplest possible test case
+   - **Rule**: Fix lower layers before debugging higher layers
+
+### Maelstrom-Specific Debugging
+
+1. **Log File Analysis**
+   ```bash
+   # Check actual Maelstrom logs, not just our stderr
+   cat store/lin-kv/latest/jepsen.log | grep -i error
+   cat store/lin-kv/latest/node-logs/n0.log
+   ```
+
+2. **Protocol Isolation Testing**
+   ```bash
+   # Test basic node communication without VSR
+   echo '{"src":"c0","dest":"n0","body":{"type":"init","msg_id":1,"node_id":"n0","node_ids":["n0"]}}' | ./run-vsr-node
+   ```
+
+3. **Message Format Validation**
+   - ✅ All Maelstrom messages must have `src`, `dest`, and `body` fields
+   - ✅ The `body` must contain `type` field
+   - ❌ Sending incomplete or empty maps
+
+### Learning from Mistakes Pattern
+
+When debugging fails repeatedly:
+
+1. **Document the error pattern** in CLAUDE.md
+2. **Identify the root misconception** that led to the wrong approach
+3. **Create systematic debugging steps** to avoid the same mistake
+4. **Update coding standards** to prevent similar issues in future
 
 This document serves as the normative standard for all code contributions to the VSR codebase.

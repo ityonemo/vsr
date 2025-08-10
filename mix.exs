@@ -14,12 +14,22 @@ defmodule Vsr.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
-    [
-      extra_applications: [:logger]
-    ]
+    case Mix.env() do
+      :maelstrom ->
+        [
+          extra_applications: [:logger],
+          mod: {Maelstrom.Application, []}
+        ]
+
+      _ ->
+        [
+          extra_applications: [:logger]
+        ]
+    end
   end
 
-  def elixirc_paths(:test), do: ["lib", "test/_support"]
+  def elixirc_paths(:test), do: ["lib", "test/_support", "maelstrom-adapter"]
+  def elixirc_paths(:maelstrom), do: ["lib", "maelstrom-adapter", "test/_support"]
   def elixirc_paths(_), do: ["lib"]
 
   # Run "mix help deps" to learn about dependencies.

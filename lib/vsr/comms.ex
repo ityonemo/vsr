@@ -1,15 +1,26 @@
-defmodule Vsr.Comms do
+use Protoss
+
+defprotocol Vsr.Comms do
   @moduledoc """
   Behaviour for VSR communications.
   """
 
   @type id :: any
-  @type from :: any
   @type filter :: (any -> boolean)
-  @callback send_to(id, message :: term) :: term
-  @callback send_reply(from, message :: term) :: term
-  @callback cluster() :: [id]
-  @callback monitor(id) :: reference
+
+  @type t :: struct
+
+  @spec send_to(t, id :: id, message :: term) :: term
+  def send_to(comms, id, message)
+
+  @spec send_reply(t, from :: id, message :: term) :: term
+  def send_reply(comms, from, message)
+
+  @spec initial_cluster(t) :: [id]
+  def initial_cluster(comms)
+
+  @spec monitor(t, id :: id) :: reference
+  def monitor(comms, id)
 end
 
 defmodule Vsr.StdComms do
@@ -30,40 +41,34 @@ defmodule Vsr.StdComms do
   your own `Vsr.Comms` behaviour module.
   """
 
-  @behaviour Vsr.Comms
+  use Vsr.Comms
+
+  alias Vsr.Message
+
+  defstruct [:filter, name: Vsr]
 
   @type id :: pid
   @type from :: GenServer.from()
 
   @impl true
-  defdelegate send_to(id, message), to: Vsr.Message, as: :vsr_send
+  def send_to(_, id, message), do: Message.vsr_send(id, message)
 
   @impl true
-  defdelegate send_reply(from, message), to: GenServer, as: :reply
-
-  @filter Application.compile_env(:vsr, :cluster_filter, {__MODULE__, :cluster_filter, []})
-  @name Application.compile_env(:vsr, :process_name, Vsr)
+  def send_reply(_, from, message), do: GenServer.reply(from, message)
 
   @impl true
-  def cluster do
-    Enum.flat_map(Node.list(), &attempt_connect/1)
-  end
+  def initial_cluster(comms), do: Enum.flat_map(Node.list(), &attempt_connect(comms, &1))
 
-  defp attempt_connect(node) do
-    {m, f, a} = @filter
-    should_connect = apply(m, f, [node | a])
-
+  defp attempt_connect(%{filter: filter} = comms, node) do
     List.wrap(
-      if should_connect do
-        :rpc.call(node, Process, :whereis, [@name])
+      if filter && filter.(node) do
+        :rpc.call(node, Process, :whereis, [comms.name])
       end
     )
   catch
     _, _ -> []
   end
 
-  def cluster_filter(_), do: true
-
   @impl true
-  defdelegate monitor(id), to: Process
+  def monitor(_, pid), do: Process.monitor(pid)
 end
