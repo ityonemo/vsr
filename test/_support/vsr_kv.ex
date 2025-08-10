@@ -16,20 +16,6 @@ defmodule VsrKv do
     Vsr.client_request(replica, {:fetch, key})
   end
 
-  def fetch!(replica, key) do
-    case fetch(replica, key) do
-      {:ok, value} -> value
-      :error -> raise KeyError, term: replica, key: key
-    end
-  end
-
-  def get(replica, key, default \\ nil) do
-    case fetch(replica, key) do
-      {:ok, value} -> value
-      :error -> default
-    end
-  end
-
   def put(replica, key, value) do
     Vsr.client_request(replica, {:put, key, value})
   end
