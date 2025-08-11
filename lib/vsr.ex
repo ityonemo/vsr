@@ -162,7 +162,7 @@ defmodule Vsr do
     case Map.fetch(state.client_table, client_key) do
       {:ok, cached_result} ->
         # Request already processed - return cached result
-        {:reply, {:ok, cached_result}, state}
+        {:reply, cached_result, state}
 
       :error ->
         # New request - process it and cache result

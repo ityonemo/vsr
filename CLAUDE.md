@@ -89,24 +89,52 @@ end
 ```
 
 ### Error Handling
-- **Explicit error tuples**: `{:error, :reason}` not just `:error`
+- **Let it crash**: Follow Erlang/Elixir philosophy - don't code defensively with excessive try/catch
+- **Explicit error tuples**: `{:error, :reason}` not just `:error` for expected error conditions
 - **Consistent patterns**: Always use same error tuple format
 - **Meaningful error reasons**: Use descriptive atoms for error reasons
+- **Crash on invalid input**: Let functions crash on invalid input rather than handling every edge case
 
 ```elixir
-# Good
-def fetch_operation(log, op_number) do
+# Good - let it crash on invalid input
+def fetch_operation(log, op_number) when is_integer(op_number) and op_number > 0 do
   case Log.fetch(log, op_number) do
     {:ok, entry} -> {:ok, entry}
     :error -> {:error, :not_found}
   end
 end
 
-# Bad
+# Good - crash immediately on invalid JSON rather than defensive error handling
+def stdin_impl(stdin, _from, state) do
+  json_map = JSON.decode!(stdin)  # Let it crash if invalid JSON
+  message = Message.from_json_map(json_map)  # Let it crash if invalid message
+  # ... process message
+end
+
+# Bad - overly defensive
 def fetch_operation(log, op_number) do
-  Log.fetch(log, op_number) || :error
+  try do
+    case Log.fetch(log, op_number) do
+      {:ok, entry} -> {:ok, entry}
+      :error -> {:error, :not_found}
+    end
+  rescue
+    _ -> {:error, :unknown}
+  end
 end
 ```
+
+**When to let it crash:**
+- Invalid JSON input
+- Missing required fields in messages  
+- Type mismatches (string passed where integer expected)
+- Programming errors (calling undefined functions)
+- Contract violations (guards should enforce contracts)
+
+**When to use error tuples:**
+- Expected business logic failures (key not found, insufficient permissions)
+- Network failures that should be retried
+- Resource unavailability that can be handled gracefully
 
 ### Pattern Matching
 - **Match in function heads** when possible
