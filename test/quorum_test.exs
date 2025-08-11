@@ -62,10 +62,8 @@ defmodule QuorumTest do
     assert state.cluster_size == 5, "Cluster size should be 5"
 
     # 2 out of 5 should NOT have quorum
-    # The operation should fail because VsrKv.put raises on error
-    assert_raise RuntimeError, ~r/quorum/, fn ->
-      VsrKv.put(replica, "no_quorum_test", "should_fail")
-    end
+    # The operation should fail with a quorum error
+    assert {:error, :quorum} = VsrKv.put(replica, "no_quorum_test", "should_fail")
   end
 
   # SKIPPED: Tests edge case of partial cluster operation  

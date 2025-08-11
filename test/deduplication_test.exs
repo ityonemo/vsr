@@ -55,7 +55,7 @@ defmodule DeduplicationTest do
     assert res2 == {:ok, :ok}
 
     # Check final value - should be from first request only
-    final_value = VsrKv.get(primary, "dedup_key")
+    {:ok, final_value} = VsrKv.fetch(primary, "diff_key")
 
     assert final_value == "value1",
            "Value should be from first request, got: #{inspect(final_value)}"
@@ -72,7 +72,7 @@ defmodule DeduplicationTest do
     assert :ok = Vsr.client_request(primary, {:put, "diff_key", "value2"}, request_id2)
 
     # Second request should overwrite first (different IDs)
-    final_value = VsrKv.get(primary, "diff_key")
+    {:ok, final_value} = VsrKv.fetch(primary, "diff_key")
     assert final_value == "value2"
   end
 
