@@ -12,6 +12,7 @@ defmodule Maelstrom.Application do
     children = [
       Maelstrom.Node,
       Maelstrom.Stdin,
+      Maelstrom.GlobalData,
       {DynamicSupervisor, name: Maelstrom.Supervisor, strategy: :one_for_one}
     ]
 

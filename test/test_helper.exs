@@ -1,2 +1,3 @@
-# Logger.configure(level: :error)
+Maelstrom.GlobalData.start_link([])
+Logger.configure(level: :error)
 ExUnit.start()

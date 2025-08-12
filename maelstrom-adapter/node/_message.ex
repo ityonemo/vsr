@@ -163,7 +163,6 @@ defmodule Maelstrom.Node.Message.Types do
 
   # OK message type helpers  
   @ok_message_types [Cas, Echo, Init, Read, Write]
-  @ok_modules Map.new(@ok_message_types, &{&1, Module.concat(&1, Ok)})
 
   # Add OK message types to the message type mapping
   @ok_message_map Map.new(@ok_message_types, fn mod ->
