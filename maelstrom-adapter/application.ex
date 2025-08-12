@@ -15,7 +15,7 @@ defmodule Maelstrom.Application do
       {DynamicSupervisor, name: Maelstrom.Supervisor, strategy: :one_for_one}
     ]
 
-    opts = [strategy: :one_for_one, name: Maelstrom.Supervisor]
+    opts = [strategy: :one_for_one, name: Maelstrom.Application]
     Supervisor.start_link(children, opts)
   end
 end

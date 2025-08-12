@@ -15,7 +15,7 @@ defmodule Maelstrom.Stdin do
         System.halt(1)
 
       line when is_binary(line) ->
-        Maelstrom.Node.stdin(line)
+        Maelstrom.Node.message(line)
     end
   end
 end

@@ -28,7 +28,7 @@ defmodule Maelstrom.KvTest do
     end
 
     test "handles read operation on empty state", %{kv: kv} do
-      {_updated_kv, nil} = Kv._apply_operation(kv, ["read", "nonexistent"])
+      {_updated_kv, {:error, :not_found}} = Kv._apply_operation(kv, ["read", "nonexistent"])
     end
 
     test "handles write operation", %{kv: kv} do
@@ -39,7 +39,7 @@ defmodule Maelstrom.KvTest do
 
     test "handles read operation after write", %{kv: kv} do
       assert {kv_after_write, _} = Kv._apply_operation(kv, ["write", "key1", "value1"])
-      assert {updated_kv, "value1"} = Kv._apply_operation(kv_after_write, ["read", "key1"])
+      assert {updated_kv, {:ok, "value1"}} = Kv._apply_operation(kv_after_write, ["read", "key1"])
 
       # State unchanged on read
       assert updated_kv == kv_after_write
@@ -75,7 +75,7 @@ defmodule Maelstrom.KvTest do
       {updated_kv, result} =
         Kv._apply_operation(kv_with_value, ["cas", "key1", "wrong_value", "new_value"])
 
-      assert result == nil
+      assert result == {:error, :precondition_failed}
       # State unchanged
       assert updated_kv.state == %{"key1" => "actual_value"}
     end
@@ -84,7 +84,7 @@ defmodule Maelstrom.KvTest do
       {updated_kv, result} =
         Kv._apply_operation(kv, ["cas", "nonexistent", "anything", "new_value"])
 
-      assert result == nil
+      assert result == {:error, :precondition_failed}
       # State unchanged
       assert updated_kv.state == %{}
     end
@@ -94,7 +94,7 @@ defmodule Maelstrom.KvTest do
       {updated_kv, result} =
         Kv._apply_operation(kv, ["cas", "new_key", "key_does_not_exist", "new_value"])
 
-      refute result
+      assert result == {:error, :precondition_failed}
       assert updated_kv.state == %{}
     end
   end
@@ -177,18 +177,18 @@ defmodule Maelstrom.KvTest do
       assert {kv, :ok} = Kv._apply_operation(kv, ["write", "user:1:email", "alice@example.com"])
 
       # Read the data back
-      assert {kv, "Alice"} = Kv._apply_operation(kv, ["read", "user:1:name"])
+      assert {kv, {:ok, "Alice"}} = Kv._apply_operation(kv, ["read", "user:1:name"])
 
-      assert {kv, "alice@example.com"} = Kv._apply_operation(kv, ["read", "user:1:email"])
+      assert {kv, {:ok, "alice@example.com"}} = Kv._apply_operation(kv, ["read", "user:1:email"])
 
       # Try to read nonexistent key
-      assert {kv, nil} = Kv._apply_operation(kv, ["read", "user:2:name"])
+      assert {kv, {:error, :not_found}} = Kv._apply_operation(kv, ["read", "user:2:name"])
 
       # Update using CAS
       assert {kv, :ok} = Kv._apply_operation(kv, ["cas", "user:1:name", "Alice", "Alice Smith"])
 
       # Verify update
-      assert {_kv, "Alice Smith"} = Kv._apply_operation(kv, ["read", "user:1:name"])
+      assert {_kv, {:ok, "Alice Smith"}} = Kv._apply_operation(kv, ["read", "user:1:name"])
     end
 
     test "concurrent modification scenario with CAS" do
@@ -201,9 +201,8 @@ defmodule Maelstrom.KvTest do
       # First one succeeds
       {kv1, :ok} = Kv._apply_operation(kv, ["cas", "counter", 0, 1])
 
-      # Second one fails because it's using the original kv state (still has counter=0)
-      # but in a real concurrent scenario, the second would use kv1 and see counter=1
-      {_kv2, nil} = Kv._apply_operation(kv1, ["cas", "counter", 0, 1])
+      # Second one fails because counter is now 1, not 0
+      {_kv2, {:error, :precondition_failed}} = Kv._apply_operation(kv1, ["cas", "counter", 0, 1])
 
       # Verify final state from successful operation
       {_final_kv, _result} = Kv._apply_operation(kv1, ["read", "counter"])

@@ -13,5 +13,5 @@ defmodule Maelstrom.Node.Init do
 
   defstruct [:msg_id, :node_id, :node_ids, type: :init]
 
-  use Maelstrom.Node.Message.Ok, type: :init_ok
+  use Maelstrom.Node.Message, type: :init_ok
 end

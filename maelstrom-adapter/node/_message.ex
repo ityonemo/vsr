@@ -1,33 +1,71 @@
-defmodule Maelstrom.Node.Message.Ok do
-  @moduledoc """
-  convenience module that provides a common `*.Ok` message reply.
-  """
-  defmacro __using__(type: type) do
-    quote do
-      defmodule Ok do
-        @moduledoc """
-        init_ok message body sent in response to Init message.
-        """
+use Protoss
 
-        @derive [JSON.Encoder]
-        @type t :: %__MODULE__{
-                type: unquote(type),
-                in_reply_to: non_neg_integer()
-              }
-
-        defstruct [:in_reply_to, type: unquote(type)]
-      end
-    end
-  end
-end
-
-defmodule Maelstrom.Node.Message do
+defprotocol Maelstrom.Node.Message do
   @moduledoc """
   Main Maelstrom message struct with src, dest, and body fields.
 
   All Maelstrom messages follow this format regardless of message type.
   The body field contains the specific message type struct.
+
+  All message types implement a `reply/2` function that sends a reply
+  message, accessible through the `Maelstrom.Node.Message` protocol.
+
+  The opts field *requires* a `:to` key with the message to reply to;
+  and for Ok messages with further payloads, the fields must be set
+  in the `opts` keyword list, with the values being the dialyzer types
+  for the fields.
   """
+
+  def reply(msg, opts)
+after
+  # AVERT YOUR EYES!
+  defmacro __using__(opts) do
+    {type, fields} = Keyword.pop!(opts, :type)
+
+    parent =
+      "#{type}"
+      |> String.trim_trailing("_ok")
+      |> String.to_atom()
+
+    types =
+      [
+        type: type,
+        in_reply_to:
+          quote do
+            non_neg_integer()
+          end
+      ] ++ fields
+
+    enforced = Keyword.keys(fields) ++ [:in_reply_to]
+
+    quote do
+      defmodule Ok do
+        @moduledoc """
+        #{unquote(type)} message body sent in response to #{unquote(parent)} message.
+        """
+
+        @derive [JSON.Encoder]
+        @type t :: %__MODULE__{unquote_splicing(types)}
+
+        @enforce_keys unquote(enforced)
+
+        defstruct @enforce_keys ++ [type: unquote(type)]
+      end
+
+      def reply(msg, opts) do
+        {parent, fields} = Keyword.pop!(opts, :to)
+
+        fields = Keyword.merge(fields, in_reply_to: msg.msg_id)
+
+        parent.dest
+        |> Maelstrom.Node.Message.new(parent.src, struct!(Ok, fields))
+        |> JSON.encode!()
+        |> IO.puts()
+      end
+    end
+  end
+
+  alias Maelstrom.Node.Message.Types
 
   alias Maelstrom.Node.Init
   alias Maelstrom.Node.Echo
@@ -39,7 +77,7 @@ defmodule Maelstrom.Node.Message do
   @type node_id :: String.t()
   @type msg_id :: non_neg_integer()
 
-  @type t :: %__MODULE__{
+  @type message :: %__MODULE__{
           src: node_id(),
           dest: node_id(),
           body: body()
@@ -61,6 +99,38 @@ defmodule Maelstrom.Node.Message do
 
   @derive [JSON.Encoder]
   defstruct [:src, :dest, :body]
+
+  @doc """
+  Creates a new Maelstrom message.
+  """
+  @spec new(node_id(), node_id(), body()) :: t()
+  def new(src, dest, body) do
+    %__MODULE__{src: src, dest: dest, body: body}
+  end
+
+  @doc """
+  Creates a Maelstrom message struct from a JSON map received from Maelstrom.
+  """
+  @spec from_json_map(%{String.t() => term()}) :: t()
+  def from_json_map(%{"src" => src, "dest" => dest, "body" => body}) do
+    %__MODULE__{
+      src: src,
+      dest: dest,
+      body: Types.body_from_json_map(body)
+    }
+  end
+end
+
+# this module needs to be defined separately to avoid circular dependencies
+defmodule Maelstrom.Node.Message.Types do
+  @moduledoc false
+
+  alias Maelstrom.Node.Init
+  alias Maelstrom.Node.Echo
+  alias Maelstrom.Node.Read
+  alias Maelstrom.Node.Write
+  alias Maelstrom.Node.Cas
+  alias Maelstrom.Node.Error
 
   # Compile-time mapping of message type strings to modules
   @vsr_messages %{
@@ -105,42 +175,12 @@ defmodule Maelstrom.Node.Message do
 
   @message_types Map.merge(@vsr_messages, @maelstrom_messages) |> Map.merge(@ok_message_map)
 
-  @doc """
-  Creates a new Maelstrom message.
-  """
-  @spec new(node_id(), node_id(), body()) :: t()
-  def new(src, dest, body) do
-    %__MODULE__{src: src, dest: dest, body: body}
-  end
-
-  @doc """
-  Creates a Maelstrom message struct from a JSON map received from Maelstrom.
-  """
-  @spec from_json_map(%{String.t() => term()}) :: t()
-  def from_json_map(%{"src" => src, "dest" => dest, "body" => body}) do
-    %__MODULE__{
-      src: src,
-      dest: dest,
-      body: body_from_json_map(body)
-    }
-  end
-
   # Convert JSON map to appropriate body struct
-  defp body_from_json_map(%{"type" => type} = body) do
+  def body_from_json_map(%{"type" => type} = body) do
     base_struct = Map.fetch!(@message_types, type).__struct__()
 
     for field <- Map.keys(base_struct), field not in [:__struct__, :type], reduce: base_struct do
       struct -> Map.replace!(struct, field, Map.fetch!(body, "#{field}"))
     end
-  end
-
-  def reply_ok(%{body: %body_mod{}} = msg, io_target) do
-    maelstrom = %Maelstrom.Comms{node_name: msg.dest, io_target: io_target}
-
-    Maelstrom.Comms.send_reply(
-      maelstrom,
-      msg.src,
-      struct!(@ok_modules[body_mod], in_reply_to: msg.body.msg_id)
-    )
   end
 end

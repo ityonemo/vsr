@@ -14,5 +14,5 @@ defmodule Maelstrom.Node.Cas do
 
   defstruct [:msg_id, :key, :from, :to, type: :cas]
 
-  use Maelstrom.Node.Message.Ok, type: :cas_ok
+  use Maelstrom.Node.Message, type: :cas_ok
 end

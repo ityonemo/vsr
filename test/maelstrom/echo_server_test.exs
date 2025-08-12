@@ -2,19 +2,25 @@ defmodule Maelstrom.EchoServerTest do
   use ExUnit.Case
   import ExUnit.CaptureIO
 
-  alias Maelstrom.Node
   alias Maelstrom.Node.Message
   alias Maelstrom.Node.Init
   alias Maelstrom.Node.Echo
 
+  setup t do
+    vsr =
+      start_supervised!(
+        {Vsr, name: :"#{t.test}-vsr", comms: %Maelstrom.Comms{node_name: "n1"}, state_machine: Kv}
+      )
+
+    pid = start_supervised!({Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: vsr})
+    {:ok, pid: pid}
+  end
+
   @tag :maelstrom
-  test "echo server responds to echo messages with echo_ok" do
+  test "echo server responds to echo messages with echo_ok", %{pid: pid} do
     # Use capture_io to trap the JSON response sent to stdout
     output =
       capture_io(fn ->
-        # Start the node - it will use the captured IO as its target
-        {:ok, pid} = Node.start_link()
-
         # First initialize the node using proper Maelstrom structs
         init_body = %Init{
           msg_id: 1,
@@ -24,7 +30,7 @@ defmodule Maelstrom.EchoServerTest do
 
         init_message = Message.new("c1", "n1", init_body)
         init_json = JSON.encode!(init_message)
-        assert :ok = Node.stdin(pid, init_json)
+        assert :ok = Maelstrom.Node.message(pid, init_json)
 
         # Now send an echo message using proper Maelstrom structs
         echo_body = %Echo{
@@ -34,20 +40,36 @@ defmodule Maelstrom.EchoServerTest do
 
         echo_message = Message.new("c1", "n1", echo_body)
         echo_json = JSON.encode!(echo_message)
-        assert :ok = Node.stdin(pid, echo_json)
+        assert :ok = Maelstrom.Node.message(pid, echo_json)
 
         # Give the GenServer time to process and respond
         :timer.sleep(50)
       end)
 
-    # Parse and verify the response
+    # Parse and verify the responses
     response_lines = String.split(String.trim(output), "\n", trim: true)
-    assert length(response_lines) >= 1, "Should have at least one response line"
+    assert length(response_lines) >= 2, "Should have init_ok and echo_ok responses"
 
-    # Get the echo response (should be the last line after any init_ok)
-    echo_response_json = List.last(response_lines)
+    # Parse all responses
+    responses = Enum.map(response_lines, &JSON.decode!/1)
 
-    # Verify the response structure using map destructuring
+    # Verify init_ok response
+    init_response = Enum.find(responses, fn resp -> resp["body"]["type"] == "init_ok" end)
+    assert init_response, "Should have init_ok response"
+
+    assert %{
+             "src" => "n1",
+             "dest" => "c1",
+             "body" => %{
+               "type" => "init_ok",
+               "in_reply_to" => 1
+             }
+           } = init_response
+
+    # Verify echo_ok response
+    echo_response = Enum.find(responses, fn resp -> resp["body"]["type"] == "echo_ok" end)
+    assert echo_response, "Should have echo_ok response"
+
     assert %{
              "src" => "n1",
              "dest" => "c1",
@@ -57,18 +79,16 @@ defmodule Maelstrom.EchoServerTest do
                "in_reply_to" => 2,
                "msg_id" => msg_id
              }
-           } = JSON.decode!(echo_response_json)
+           } = echo_response
 
     assert is_integer(msg_id)
   end
 
   @tag :maelstrom
-  test "echo server handles multiple echo messages with incremental msg_ids" do
+  test "echo server handles multiple echo messages with incremental msg_ids", %{pid: pid} do
     # Send multiple echo messages and capture all responses
     output =
       capture_io(fn ->
-        {:ok, pid} = Node.start_link()
-
         # Initialize the node first using proper Maelstrom structs
         init_body = %Init{
           msg_id: 1,
@@ -78,7 +98,7 @@ defmodule Maelstrom.EchoServerTest do
 
         init_message = Message.new("c1", "n1", init_body)
         init_json = JSON.encode!(init_message)
-        assert :ok = Node.stdin(pid, init_json)
+        assert :ok = Maelstrom.Node.message(pid, init_json)
 
         # First echo using proper Maelstrom structs
         echo1_body = %Echo{
@@ -88,7 +108,7 @@ defmodule Maelstrom.EchoServerTest do
 
         echo1_message = Message.new("c1", "n1", echo1_body)
         echo1_json = JSON.encode!(echo1_message)
-        assert :ok = Node.stdin(pid, echo1_json)
+        assert :ok = Maelstrom.Node.message(pid, echo1_json)
 
         # Second echo using proper Maelstrom structs
         echo2_body = %Echo{
@@ -98,7 +118,7 @@ defmodule Maelstrom.EchoServerTest do
 
         echo2_message = Message.new("c1", "n1", echo2_body)
         echo2_json = JSON.encode!(echo2_message)
-        assert :ok = Node.stdin(pid, echo2_json)
+        assert :ok = Maelstrom.Node.message(pid, echo2_json)
 
         :timer.sleep(100)
       end)
@@ -107,14 +127,26 @@ defmodule Maelstrom.EchoServerTest do
     response_lines = String.split(String.trim(output), "\n", trim: true)
 
     # Should have init_ok plus two echo responses
-    assert length(response_lines) >= 2
+    assert length(response_lines) >= 3, "Should have init_ok and two echo_ok responses"
 
-    # Find echo responses (skip init_ok)
-    echo_responses =
-      response_lines
-      |> Enum.map(&JSON.decode!/1)
-      |> Enum.filter(fn resp -> resp["body"]["type"] == "echo_ok" end)
+    # Parse all responses
+    responses = Enum.map(response_lines, &JSON.decode!/1)
 
+    # Verify init_ok response
+    init_response = Enum.find(responses, fn resp -> resp["body"]["type"] == "init_ok" end)
+    assert init_response, "Should have init_ok response"
+
+    assert %{
+             "src" => "n1",
+             "dest" => "c1",
+             "body" => %{
+               "type" => "init_ok",
+               "in_reply_to" => 1
+             }
+           } = init_response
+
+    # Find echo responses
+    echo_responses = Enum.filter(responses, fn resp -> resp["body"]["type"] == "echo_ok" end)
     assert length(echo_responses) == 2
 
     # Verify responses using map destructuring

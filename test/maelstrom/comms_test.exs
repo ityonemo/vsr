@@ -7,7 +7,7 @@ defmodule Maelstrom.CommsTest do
 
   describe "initial_cluster/1" do
     test "returns empty list as expected" do
-      maelstrom = %Comms{node_name: "n1", io_target: self()}
+      maelstrom = %Comms{node_name: "n1"}
       assert Comms.initial_cluster(maelstrom) == []
     end
   end
@@ -20,7 +20,7 @@ defmodule Maelstrom.CommsTest do
       # Capture the IO output
       output =
         capture_io(fn ->
-          maelstrom = %Comms{node_name: "n1", io_target: Process.group_leader()}
+          maelstrom = %Comms{node_name: "n1"}
           Comms.send_to(maelstrom, dest_id, message)
         end)
 
@@ -44,7 +44,7 @@ defmodule Maelstrom.CommsTest do
       # Capture the IO output
       output =
         capture_io(fn ->
-          maelstrom = %Comms{node_name: "n1", io_target: Process.group_leader()}
+          maelstrom = %Comms{node_name: "n1"}
           Comms.send_reply(maelstrom, from, message)
         end)
 
@@ -62,7 +62,7 @@ defmodule Maelstrom.CommsTest do
     end
 
     test "monitor/2 returns reference" do
-      maelstrom = %Comms{node_name: "n1", io_target: self()}
+      maelstrom = %Comms{node_name: "n1"}
       ref = Comms.monitor(maelstrom, "n2")
 
       assert is_reference(ref)
