@@ -50,17 +50,25 @@ defmodule Maelstrom.Kv do
   # Operation handlers
 
   defp handle_read(state_machine, key) do
-    {state_machine, Map.get(state_machine.state, key)}
+    case Map.fetch(state_machine.state, key) do
+      :error -> {state_machine, {:error, :not_found}}
+      ok_value -> {state_machine, ok_value}
+    end
   end
 
   defp handle_write(state_machine, key, value) do
     {%{state_machine | state: Map.put(state_machine.state, key, value)}, :ok}
   end
 
-  defp handle_cas(state_machine, key, from, to)
-       when :erlang.map_get(key, state_machine.state) == from do
-    {%{state_machine | state: Map.replace!(state_machine.state, key, to)}, :ok}
-  end
+  defp handle_cas(state_machine, key, from, to) do
+    current_value = Map.get(state_machine.state, key)
 
-  defp handle_cas(state_machine, _key, _from, _to), do: {state_machine, nil}
+    if current_value == from do
+      new_state = Map.put(state_machine.state, key, to)
+      {%{state_machine | state: new_state}, :ok}
+    else
+      # Return error indicating precondition failed
+      {state_machine, {:error, :precondition_failed}}
+    end
+  end
 end

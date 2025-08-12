@@ -7,7 +7,7 @@ defmodule Maelstrom.Comms do
   """
 
   @enforce_keys [:node_name]
-  defstruct @enforce_keys ++ [io_target: :stdio]
+  defstruct @enforce_keys
 
   use Vsr.Comms
 
@@ -23,26 +23,26 @@ defmodule Maelstrom.Comms do
   @impl true
   def initial_cluster(_comms), do: []
 
-  # VSR.Comms protocol implementation (3-arity versions)
+  # VSR.Comms protocol implementation
   @impl true
   def send_to(maelstrom, dest_id, message) do
     maelstrom.node_name
     |> Message.new(dest_id, message)
-    |> send_stdout(maelstrom.io_target)
+    |> send_stdout()
   end
 
   @impl true
   def send_reply(maelstrom, from, message) do
     maelstrom.node_name
     |> Message.new(from, message)
-    |> send_stdout(maelstrom.io_target)
+    |> send_stdout()
   end
 
   # Send JSON message to IO target
-  defp send_stdout(message, io_target) do
+  defp send_stdout(message) do
     message
     |> JSON.encode!()
-    |> then(&IO.puts(io_target, &1))
+    |> IO.puts()
   end
 
   @impl true

@@ -13,5 +13,5 @@ defmodule Maelstrom.Node.Write do
 
   defstruct [:msg_id, :key, :value, type: :write]
 
-  use Maelstrom.Node.Message.Ok, type: :write_ok
+  use Maelstrom.Node.Message, type: :write_ok
 end

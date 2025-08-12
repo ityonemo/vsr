@@ -1,291 +1,210 @@
 defmodule Maelstrom.NodeTest do
   use ExUnit.Case, async: true
-  alias Maelstrom.Node
+  import ExUnit.CaptureIO
+
+  alias Maelstrom.Node.Message
+  alias Maelstrom.Node.Init
+  alias Maelstrom.Node.Echo
+  alias Maelstrom.Node.Read
+  alias Maelstrom.Node.Write
+  alias Maelstrom.Node.Cas
+
+  require Logger
 
   @moduletag :maelstrom
 
-  # Clean up any running nodes after each test
-  setup t do
-    node_svr = start_supervised!({Node, name: :"#{t.test}-node", io_target: self()})
-    {:ok, node_svr: node_svr}
+  defp setup_server(t, vsr_expectation) do
+    listener = spawn_link(vsr_expectation)
+
+    {Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: listener}
+    |> start_supervised!()
+    |> tap(&Process.group_leader(&1, Process.group_leader()))
   end
 
-  describe "start_link/1 and init/1" do
-    test "starts node in test mode without STDIN reader", %{node_svr: node_svr} do
-      # Verify initial state
-
-      assert %Node{
-               node_id: nil,
-               node_ids: nil,
-               vsr_replica: nil,
-               msg_id_counter: 0,
-               pending_requests: %{}
-             } = :sys.get_state(node_svr)
-    end
-
-    test "starts node in production mode (but skip STDIN for tests)", %{node_svr: _node_svr} do
-      # We can't easily test the STDIN reader in unit tests
-      # The test_mode: true flag prevents the STDIN reader from starting
-      {:ok, pid} = Node.start_link(test_mode: true)
-
-      assert Process.alive?(pid)
-      assert Process.whereis(Node) == pid
+  defmacrop assert_called(what, reply) do
+    quote do
+      assert_receive {:"$gen_call", from, unquote(what)}, 1000
+      GenServer.reply(from, unquote(reply))
     end
   end
 
-  describe "handle_cast/2 - maelstrom messages" do
-    setup do
-      {:ok, pid} = Node.start_link(test_mode: true)
-      {:ok, pid: pid}
-    end
+  describe "maelstrom messages" do
+    test "handles init message", t do
+      capture_io(fn ->
+        node_svr =
+          setup_server(t, fn ->
+            assert_called({:set_cluster, ["n1", "n2", "n3"]}, :ok)
+            :done
+          end)
 
-    test "handles init message", %{pid: pid} do
-      init_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{
-          "type" => "init",
-          "msg_id" => 1,
-          "node_id" => "n1",
-          "node_ids" => ["n1", "n2", "n3"]
-        }
-      }
+        send_message(node_svr, %Init{
+          msg_id: 1,
+          node_id: "n1",
+          node_ids: ["n1", "n2", "n3"]
+        })
 
-      # Capture stdout to check response
-      ExUnit.CaptureIO.capture_io(fn ->
-        GenServer.cast(pid, {:maelstrom_msg, init_msg})
         # Allow message to be processed
         Process.sleep(100)
+
+        # Verify state was updated
+        state = :sys.get_state(node_svr)
+        assert state.node_id == "n1"
+        assert state.node_ids == ["n1", "n2", "n3"]
       end)
-
-      # Verify state was updated
-      state = :sys.get_state(pid)
-      assert state.node_id == "n1"
-      assert state.node_ids == ["n1", "n2", "n3"]
-      # VSR startup is skipped in test mode
-      assert state.vsr_replica == nil
     end
 
-    test "handles echo message", %{pid: pid} do
-      echo_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{
-          "type" => "echo",
-          "msg_id" => 2,
-          "echo" => "Hello World"
-        }
-      }
+    test "handles echo message", t do
+      output =
+        capture_io(fn ->
+          node_svr =
+            setup_server(t, fn ->
+              assert_called({:set_cluster, ["n1"]}, :ok)
+            end)
 
-      # Initialize node first
-      init_node(pid, "n1", ["n1"])
+          # Initialize node first
+          init_node(node_svr, "n1", ["n1"])
 
-      # Just verify the message doesn't crash the node
-      GenServer.cast(pid, {:maelstrom_msg, echo_msg})
-      Process.sleep(100)
+          send_message(node_svr, %Echo{
+            msg_id: 2,
+            echo: "Hello World"
+          })
 
-      # Node should still be alive and responsive
-      assert Process.alive?(pid)
-      assert GenServer.call(pid, :get_cluster) == {:ok, ["n1"]}
+          Process.sleep(100)
+        end)
+
+      assert [
+               %{"body" => %{"type" => "init_ok"}},
+               %{"body" => %{"type" => "echo_ok", "echo" => "Hello World"}}
+             ] =
+               output
+               |> String.split("\n", parts: 2)
+               |> Enum.map(&JSON.decode!/1)
     end
 
-    test "handles write operation", %{pid: pid} do
-      write_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{
-          "type" => "write",
-          "msg_id" => 3,
-          "key" => "test_key",
-          "value" => "test_value"
-        }
-      }
+    test "handles write operation", t do
+      capture_io(fn ->
+        node_svr =
+          setup_server(t, fn ->
+            assert_called({:set_cluster, ["n1"]}, :ok)
 
-      # Initialize node first
-      init_node(pid, "n1", ["n1"])
+            assert_called(
+              {:client_request, ["write", "test_key", "test_value"]},
+              :ok
+            )
+          end)
 
-      # Just verify the message doesn't crash the node
-      GenServer.cast(pid, {:maelstrom_msg, write_msg})
-      # VSR operations may take longer
-      Process.sleep(200)
+        # Initialize node first
+        init_node(node_svr, "n1", ["n1"])
 
-      # Node should still be alive and responsive
-      assert Process.alive?(pid)
+        send_message(node_svr, %Write{
+          msg_id: 3,
+          key: "test_key",
+          value: "test_value"
+        })
+
+        Process.sleep(100)
+      end)
     end
 
-    test "handles read operation", %{pid: pid} do
-      # Initialize node
-      init_node(pid, "n1", ["n1"])
+    test "handles read operation", t do
+      capture_io(fn ->
+        node_svr =
+          setup_server(t, fn ->
+            assert_called({:set_cluster, ["n1"]}, :ok)
+            assert_called({:client_request, ["read", "test_key"]}, {:ok, "test_value"})
+          end)
 
-      read_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "read", "msg_id" => 2, "key" => "test_key"}
-      }
+        # Initialize node
+        init_node(node_svr, "n1", ["n1"])
 
-      # Just verify the message doesn't crash the node
-      GenServer.cast(pid, {:maelstrom_msg, read_msg})
-      Process.sleep(200)
+        send_message(node_svr, %Read{
+          msg_id: 2,
+          key: "test_key"
+        })
 
-      # Node should still be alive and responsive
-      assert Process.alive?(pid)
+        Process.sleep(100)
+      end)
     end
 
-    test "handles cas operation", %{pid: pid} do
-      init_node(pid, "n1", ["n1"])
+    test "handles cas operation", t do
+      capture_io(fn ->
+        node_svr =
+          setup_server(t, fn ->
+            assert_called({:set_cluster, ["n1"]}, :ok)
+            assert_called({:client_request, ["cas", "counter", 0, 1]}, :ok)
+            :done
+          end)
 
-      # CAS operation
-      cas_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "cas", "msg_id" => 2, "key" => "counter", "from" => 0, "to" => 1}
-      }
+        init_node(node_svr, "n1", ["n1"])
 
-      # Just verify the message doesn't crash the node
-      GenServer.cast(pid, {:maelstrom_msg, cas_msg})
-      Process.sleep(200)
+        send_message(node_svr, %Cas{
+          msg_id: 2,
+          key: "counter",
+          from: 0,
+          to: 1
+        })
 
-      # Node should still be alive and responsive
-      assert Process.alive?(pid)
-    end
+        Process.sleep(200)
 
-    test "handles operations before initialization", %{pid: pid} do
-      read_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "read", "msg_id" => 1, "key" => "any_key"}
-      }
-
-      # Just verify the message doesn't crash the node
-      GenServer.cast(pid, {:maelstrom_msg, read_msg})
-      Process.sleep(100)
-
-      # Node should still be alive and responsive
-      assert Process.alive?(pid)
-    end
-
-    test "handles unknown message type", %{pid: pid} do
-      unknown_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "unknown_type", "msg_id" => 1}
-      }
-
-      # Should not crash, just log warning
-      GenServer.cast(pid, {:maelstrom_msg, unknown_msg})
-      Process.sleep(50)
-
-      # Node should still be alive
-      assert Process.alive?(pid)
+        # Node should still be alive and responsive
+        assert Process.alive?(node_svr)
+      end)
     end
   end
 
-  describe "handle_cast/2 - VSR message sending" do
-    setup do
-      {:ok, pid} = Node.start_link(test_mode: true)
-      init_node(pid, "n1", ["n1", "n2"])
-      {:ok, pid: pid}
-    end
+  describe "increments message ID" do
+    test "handles message ID increments", t do
+      capture_io(fn ->
+        node_svr =
+          setup_server(t, fn ->
+            assert_called({:set_cluster, ["n1"]}, :ok)
+          end)
 
-    test "handles send_vsr_message", %{pid: pid} do
-      vsr_msg = %{type: :prepare, view: 1, op_number: 1}
+        init_node(node_svr, "n1", ["n1"])
 
-      # Just verify the message doesn't crash the node
-      GenServer.cast(pid, {:send_vsr_message, "n2", vsr_msg})
-      Process.sleep(50)
+        # Send multiple echo messages and verify node remains stable
+        send_message(node_svr, %Echo{
+          msg_id: 1,
+          echo: "first"
+        })
 
-      # Node should still be alive and responsive
-      assert Process.alive?(pid)
-      assert GenServer.call(pid, :get_cluster) == {:ok, ["n1", "n2"]}
+        send_message(
+          node_svr,
+          %Echo{
+            msg_id: 2,
+            echo: "second"
+          }
+        )
+
+        Process.sleep(100)
+
+        # Verify message counter increased
+        state = :sys.get_state(node_svr)
+        assert state.msg_id_counter > 0
+
+        # Node should still be responsive
+        assert Process.alive?(node_svr)
+      end)
     end
   end
 
-  describe "handle_call/3" do
-    setup do
-      {:ok, pid} = Node.start_link(test_mode: true)
-      {:ok, pid: pid}
-    end
-
-    test "get_cluster returns cluster when initialized", %{pid: pid} do
-      init_node(pid, "n1", ["n1", "n2", "n3"])
-
-      assert GenServer.call(pid, :get_cluster) == {:ok, ["n1", "n2", "n3"]}
-    end
-
-    test "get_cluster returns not_initialized when not initialized", %{pid: pid} do
-      assert GenServer.call(pid, :get_cluster) == {:error, :not_initialized}
-    end
-  end
-
-  describe "JSON protocol compliance" do
-    setup do
-      {:ok, pid} = Node.start_link(test_mode: true)
-      {:ok, pid: pid}
-    end
-
-    test "handles JSON message without crashing", %{pid: pid} do
-      init_msg = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "init", "msg_id" => 1, "node_id" => "n1", "node_ids" => ["n1"]}
-      }
-
-      # Just verify the message processing doesn't crash
-      GenServer.cast(pid, {:maelstrom_msg, init_msg})
-      Process.sleep(100)
-
-      # Verify state was updated correctly
-      state = :sys.get_state(pid)
-      assert state.node_id == "n1"
-      assert state.node_ids == ["n1"]
-    end
-
-    test "handles message ID increments", %{pid: pid} do
-      init_node(pid, "n1", ["n1"])
-
-      # Send multiple messages and verify node remains stable
-      msg1 = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "echo", "msg_id" => 1, "echo" => "first"}
-      }
-
-      msg2 = %{
-        "src" => "c1",
-        "dest" => "n1",
-        "body" => %{"type" => "echo", "msg_id" => 2, "echo" => "second"}
-      }
-
-      GenServer.cast(pid, {:maelstrom_msg, msg1})
-      GenServer.cast(pid, {:maelstrom_msg, msg2})
-      Process.sleep(100)
-
-      # Verify message counter increased
-      state = :sys.get_state(pid)
-      assert state.msg_id_counter > 0
-
-      # Node should still be responsive
-      assert Process.alive?(pid)
-    end
+  # Helper function to directly send a message (no JSON encoding)
+  # note that JSON encoding is tested in the *_server_test.exs files.
+  defp send_message(svr, message) do
+    "c1"
+    |> Message.new("n1", message)
+    |> then(&Maelstrom.Node.message(svr, &1))
   end
 
   # Helper function to initialize a node
-  defp init_node(pid, node_id, node_ids) do
-    init_msg = %{
-      "src" => "c1",
-      "dest" => node_id,
-      "body" => %{
-        "type" => "init",
-        "msg_id" => 1,
-        "node_id" => node_id,
-        "node_ids" => node_ids
-      }
-    }
+  defp init_node(node_svr, node_id, node_ids) do
+    send_message(node_svr, %Init{
+      msg_id: 1,
+      node_id: node_id,
+      node_ids: node_ids
+    })
 
-    ExUnit.CaptureIO.capture_io(fn ->
-      GenServer.cast(pid, {:maelstrom_msg, init_msg})
-      # Allow VSR to start up
-      Process.sleep(200)
-    end)
+    # Allow VSR to start up
+    Process.sleep(200)
   end
 end

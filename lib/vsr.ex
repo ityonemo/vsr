@@ -111,6 +111,7 @@ defmodule Vsr do
   @spec client_request(pid(), term()) :: :ok
   @spec start_view_change(pid()) :: :ok
   @spec get_state(pid()) :: term()
+  @spec set_cluster(pid(), [term()]) :: :ok
 
   # debug api
   @spec dump(pid()) :: %__MODULE__{}
@@ -706,7 +707,7 @@ defmodule Vsr do
 
   # State Transfer Message Implementations
 
-  defp get_state_impl(get_state, state) do
+  defp get_state_impl(v, state) do
     # Send current state to requesting replica
     new_state_msg = %NewState{
       view: state.view_number,
@@ -716,7 +717,7 @@ defmodule Vsr do
       state_machine_state: StateMachine._get_state(state.state_machine)
     }
 
-    Comms.send_to(state.comms, get_state.sender, new_state_msg)
+    Comms.send_to(state.comms, v.sender, new_state_msg)
 
     {:noreply, state}
   end
@@ -753,6 +754,13 @@ defmodule Vsr do
   def start_view_change(pid), do: GenServer.cast(pid, :start_view_change)
 
   def get_state(pid), do: GenServer.call(pid, :get_state)
+  def set_cluster(pid, node_ids), do: GenServer.call(pid, {:set_cluster, node_ids})
+
+  defp set_cluster_impl(node_ids, _from, state) do
+    cluster_size = length(node_ids)
+    new_state = %{state | cluster_size: cluster_size, replicas: MapSet.new(node_ids)}
+    {:reply, :ok, new_state}
+  end
 
   # Debug impls
 
@@ -862,6 +870,9 @@ defmodule Vsr do
 
   def handle_call({:client_request, operation, client_pid, request_id}, from, state),
     do: client_request_impl(operation, client_pid, request_id, from, state)
+
+  def handle_call({:set_cluster, node_ids}, from, state),
+    do: set_cluster_impl(node_ids, from, state)
 
   def handle_cast({:vsr, %type{} = msg}, state) do
     case type do

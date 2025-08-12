@@ -16,8 +16,6 @@ defmodule Maelstrom.Node.MessageTest do
   alias Vsr.Message.ClientRequest
   alias Vsr.Message.Heartbeat
 
-  @moduletag :maelstrom
-
   describe "from_json_map/1" do
     test "converts Maelstrom init message correctly" do
       json_map = %{

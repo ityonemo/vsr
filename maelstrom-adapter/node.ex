@@ -1,6 +1,6 @@
 defmodule Maelstrom.Node do
   @moduledoc """
-  Main Maelstrom node implementation that handles JSON protocol via STDIN/STDOUT.
+  Main Maelstrom node implementation that handles JSON protocol via message/STDOUT.
 
   This module bridges Maelstrom's JSON protocol with our VSR implementation,
   providing a distributed systems testing interface.
@@ -38,11 +38,19 @@ defmodule Maelstrom.Node do
   defstruct [
     :node_id,
     :node_ids,
-    :vsr_replica,
-    io_target: :stdio,
+    vsr_replica: Vsr,
     msg_id_counter: 0,
     pending_requests: %{}
   ]
+
+  # node_id and node_ids may only be nil in the pre-init phase.
+  @type state :: %__MODULE__{
+          node_id: String.t() | nil,
+          node_ids: [String.t()] | nil,
+          vsr_replica: pid() | atom(),
+          msg_id_counter: non_neg_integer(),
+          pending_requests: map()
+        }
 
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -50,11 +58,9 @@ defmodule Maelstrom.Node do
   end
 
   def init(opts) do
-    opts = Keyword.take(opts, [:io_target])
-    {:ok, struct!(__MODULE__, opts)}
+    {:ok, struct!(__MODULE__, Keyword.drop(opts, [:name]))}
   end
 
-  @maelstrom_actions [Echo, Read, Write, Cas]
   @vsr_messages [
     Prepare,
     PrepareOk,
@@ -69,39 +75,41 @@ defmodule Maelstrom.Node do
     ClientRequest
   ]
 
-  def stdin(server \\ __MODULE__, stdin), do: GenServer.call(server, {:stdin, stdin})
+  def message(server \\ __MODULE__, message)
 
-  defp stdin_impl(stdin, _from, state) do
-    Logger.debug("Received Maelstrom message: #{stdin}")
+  def message(server, message) when is_binary(message) do
+    message
+    |> JSON.decode!()
+    |> Message.from_json_map()
+    |> then(&message(server, &1))
+  end
 
-    json_map = JSON.decode!(stdin)
-    message = Message.from_json_map(json_map)
+  def message(server, message) do
+    GenServer.call(server, {:message, message})
+  end
+
+  defp message_impl(message, _from, state) do
+    Logger.debug("Received Maelstrom message: #{JSON.encode!(message)}")
 
     new_state =
       case message.body do
         %Init{} = init ->
-          do_init(init, state)
+          do_init(init, message, state)
 
-        %Echo{echo: echo} ->
-          # Handle echo message by sending echo_ok reply
-          new_msg_id = state.msg_id_counter + 1
+        %Echo{} = echo ->
+          do_echo(echo, message, state)
 
-          reply_body = %Echo.Ok{
-            in_reply_to: message.body.msg_id,
-            msg_id: new_msg_id,
-            echo: echo
-          }
+        %Read{} = read ->
+          do_read(read, message, state)
 
-          reply_message = Message.new(message.dest, message.src, reply_body)
-          send_stdout(reply_message, state.io_target)
-          %{state | msg_id_counter: new_msg_id}
+        %Write{} = write ->
+          do_write(write, message, state)
 
-        %struct{} when struct in @maelstrom_actions ->
-          # Handle other maelstrom actions - for now just return current state
-          state
+        %Cas{} = cas ->
+          do_cas(cas, message, state)
 
         %struct{} when struct in @vsr_messages ->
-          # Handle VSR messages - for now just return current state  
+          raise "you gotta handle the vsr messages!"
           state
 
         _ ->
@@ -112,119 +120,84 @@ defmodule Maelstrom.Node do
     {:reply, :ok, new_state}
   end
 
-  defp do_init(%{node_id: node_id, node_ids: node_ids} = _init, state) do
+  defp do_init(%{node_id: node_id, node_ids: node_ids} = init, message, state) do
     Logger.info("Initializing Maelstrom node #{node_id} with cluster: #{inspect(node_ids)}")
 
-    # In test environments, skip VSR replica startup since Maelstrom.Supervisor isn't available
-    vsr_replica =
-      if Process.whereis(Maelstrom.Supervisor) do
-        # start VSR replica.
-        vsr_opts = [
-          log: {DetsLog, [node_id, [dets_file: "#{node_id}_log.dets"]]},
-          state_machine: Kv,
-          cluster_size: length(node_ids),
-          comms_module: Comms
-        ]
+    # Update VSR with cluster information
+    Vsr.set_cluster(state.vsr_replica, node_ids)
 
-        case DynamicSupervisor.start_child(Maelstrom.Supervisor, {Vsr, [vsr_opts]}) do
-          {:ok, replica} ->
-            Process.link(replica)
+    Message.reply(init, to: message)
 
-            Enum.each(node_ids, fn other_node ->
-              if other_node != node_id do
-                Vsr.connect(replica, other_node)
-              end
-            end)
-
-            replica
-
-          {:error, _reason} ->
-            nil
-        end
-      else
-        Logger.debug("Skipping VSR replica startup in test environment")
-        nil
-      end
-
-    %{state | node_id: node_id, node_ids: node_ids, vsr_replica: vsr_replica}
+    %{state | node_id: node_id, node_ids: node_ids}
   end
 
-  def vsr_message(server \\ __MODULE__, dest_node, message),
-    do: GenServer.call(server, {:vsr_message, dest_node, message})
+  defp do_echo(%Echo{msg_id: msg_id} = echo, message, state) do
+    Logger.debug("Echoing message #{msg_id} with content: #{inspect(echo)}")
+    new_msg_id = state.msg_id_counter + 1
 
-  defp vsr_message_impl(dest_node, message, _from, state) do
-    state.node_id
-    |> Message.new(dest_node, message)
-    |> send_stdout(state.io_target)
+    Message.reply(echo, to: message, echo: echo.echo, msg_id: new_msg_id)
 
-    {:reply, :ok, state}
+    %{state | msg_id_counter: new_msg_id}
   end
 
-  # Send JSON message to STDOUT
-  defp send_stdout(message, io_target) do
-    message
-    |> JSON.encode!()
-    |> then(&IO.puts(io_target, &1))
-  end
+  # KV operation implementations
+  defp do_read(%Read{key: key} = read, message, state) do
+    # Execute read operation through VSR
+    case Vsr.client_request(state.vsr_replica, ["read", key]) do
+      {:ok, value} ->
+        Message.reply(read, to: message, value: value)
 
-  def handle_call({:stdin, stdin}, from, state), do: stdin_impl(stdin, from, state)
+        state
 
-  def handle_call({:vsr_message, dest_node, message}, from, state),
-    do: vsr_message_impl(dest_node, message, from, state)
+      {:error, :not_found} ->
+        send_error_reply(message, state, 20, "key not found")
 
-  def handle_call(:get_cluster, _from, %{node_ids: nil} = state) do
-    {:reply, {:error, :not_initialized}, state}
-  end
-
-  def handle_call(:get_cluster, _from, %{node_ids: node_ids} = state) do
-    {:reply, {:ok, node_ids}, state}
-  end
-
-  def handle_cast({:maelstrom_msg, msg_map}, state) do
-    try do
-      message = Message.from_json_map(msg_map)
-
-      case message.body do
-        %Init{} = init ->
-          new_state = do_init(init, state)
-          {:noreply, new_state}
-
-        %Echo{echo: echo} ->
-          # Handle echo message by sending echo_ok reply
-          new_msg_id = state.msg_id_counter + 1
-
-          reply_body = %Echo.Ok{
-            in_reply_to: message.body.msg_id,
-            msg_id: new_msg_id,
-            echo: echo
-          }
-
-          reply_message = Message.new(message.dest, message.src, reply_body)
-          send_stdout(reply_message, state.io_target)
-          new_state = %{state | msg_id_counter: new_msg_id}
-          {:noreply, new_state}
-
-        %struct{} when struct in @maelstrom_actions ->
-          # Handle other maelstrom operations like Read, Write, Cas
-          {:noreply, state}
-
-        %struct{} when struct in @vsr_messages ->
-          # Handle VSR messages
-          {:noreply, state}
-
-        _ ->
-          Logger.warning("Unhandled message type: #{inspect(message.body)}")
-          {:noreply, state}
-      end
-    rescue
-      error ->
-        Logger.error("Failed to process maelstrom message: #{inspect(error)}")
-        {:noreply, state}
+      {:error, _reason} ->
+        send_error_reply(message, state, 13, "temporarily unavailable")
     end
   end
 
-  def handle_cast(msg, state) do
-    Logger.warning("Unhandled cast message: #{inspect(msg)}")
-    {:noreply, state}
+  defp do_write(%Write{key: key, value: value} = write, message, state) do
+    # Execute write operation through VSR
+    case Vsr.client_request(state.vsr_replica, ["write", key, value]) do
+      :ok ->
+        Message.reply(write, to: message)
+
+        state
+
+      {:error, _reason} ->
+        send_error_reply(message, state, 13, "temporarily unavailable")
+    end
   end
+
+  defp do_cas(%Cas{key: key, from: from, to: to} = cas, message, state) do
+    # Execute CAS operation through VSR
+    case Vsr.client_request(state.vsr_replica, ["cas", key, from, to]) do
+      :ok ->
+        Message.reply(cas, to: message)
+
+        state
+
+      {:error, :precondition_failed} ->
+        send_error_reply(message, state, 22, "precondition failed")
+
+      {:error, _reason} ->
+        send_error_reply(message, state, 13, "temporarily unavailable")
+    end
+  end
+
+  defp send_error_reply(message, state, code, text) do
+    message.dest
+    |> Message.new(message.src, %Maelstrom.Node.Error{
+      in_reply_to: message.body.msg_id,
+      code: code,
+      text: text
+    })
+    |> JSON.encode!()
+    |> IO.puts()
+
+    state
+  end
+
+  def handle_call({:message, message}, from, state), do: message_impl(message, from, state)
 end
