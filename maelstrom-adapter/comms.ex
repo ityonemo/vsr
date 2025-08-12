@@ -11,12 +11,11 @@ defmodule Maelstrom.Comms do
 
   use Vsr.Comms
 
+  alias Maelstrom.GlobalData
+  alias Maelstrom.Node
   alias Maelstrom.Node.Message
 
-  # addresses in Maelstrom are a tuple of the pid of the Maelstrom.Node process
-  # (or Maelstrom.Node atom) and the Maelstrom node name.
-
-  @type id :: {pid | Maelstrom.Node, node_name :: String.t()}
+  @type id :: String.t()
 
   # it is not possible for Maelstrom to provide a cluster at initialization time,
   # as it is only notified of the cluster AFTER initialization.
@@ -24,7 +23,17 @@ defmodule Maelstrom.Comms do
   def initial_cluster(_comms), do: []
 
   # VSR.Comms protocol implementation
+  # loopback in the case the node is trying to communicate with itself.nup
   @impl true
+  def send_to(%{node_name: node_name}, node_name, message) do
+    case GlobalData.fetch(node_name) do
+      {:ok, pid} ->
+        Node.message(pid, message)
+      :error ->
+        raise "Node #{node_name} not registered"
+    end
+  end
+
   def send_to(maelstrom, dest_id, message) do
     maelstrom.node_name
     |> Message.new(dest_id, message)
@@ -32,10 +41,15 @@ defmodule Maelstrom.Comms do
   end
 
   @impl true
-  def send_reply(maelstrom, from, message) do
-    maelstrom.node_name
-    |> Message.new(from, message)
-    |> send_stdout()
+  def send_reply(_, from, message) do
+    case from do
+      from when is_integer(from) ->
+        from
+        |> GlobalData.pop!()
+        |> GenServer.reply(message)
+      genserver_from ->
+        GenServer.reply(genserver_from, message)
+    end
   end
 
   # Send JSON message to IO target
@@ -46,6 +60,6 @@ defmodule Maelstrom.Comms do
   end
 
   @impl true
-  # Return dummy reference since Maelstrom handles node monitoring
+  # Return dummy reference since Maelstrom nodes down detection is through timeout.
   def monitor(_, _pid), do: make_ref()
 end

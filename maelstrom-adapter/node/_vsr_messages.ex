@@ -3,10 +3,12 @@
 
 # Normal Operation Messages
 defimpl JSON.Encoder, for: Vsr.Message.Prepare do
+  alias Maelstrom.GlobalData
   def encode(%Vsr.Message.Prepare{} = prepare, opts) do
     prepare
     |> Map.from_struct()
     |> Map.put("type", "prepare")
+    |> Map.update!(:from, &GlobalData.store_from/1)
     |> JSON.Encoder.encode(opts)
   end
 end
@@ -96,10 +98,12 @@ end
 
 # Client Messages  
 defimpl JSON.Encoder, for: Vsr.Message.ClientRequest do
+  alias Maelstrom.GlobalData
   def encode(%Vsr.Message.ClientRequest{} = client_request, opts) do
     client_request
     |> Map.from_struct()
     |> Map.put("type", "client_request")
+    |> Map.update!(:from, &GlobalData.store_from/1)
     |> JSON.Encoder.encode(opts)
   end
 end

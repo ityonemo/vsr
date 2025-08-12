@@ -5,11 +5,12 @@ defmodule Maelstrom.EchoServerTest do
   alias Maelstrom.Node.Message
   alias Maelstrom.Node.Init
   alias Maelstrom.Node.Echo
+  alias Maelstrom.Kv
 
   setup t do
     vsr =
       start_supervised!(
-        {Vsr, name: :"#{t.test}-vsr", comms: %Maelstrom.Comms{node_name: "n1"}, state_machine: Kv}
+        {Vsr, name: :"#{t.test}-vsr", comms: %Maelstrom.Comms{node_name: "n1"}, state_machine: Kv, log: []}
       )
 
     pid = start_supervised!({Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: vsr})

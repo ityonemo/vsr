@@ -19,6 +19,7 @@ defmodule Maelstrom.Node do
 
   # maelstrom components
   alias Maelstrom.Comms
+  alias Maelstrom.GlobalData
   alias Maelstrom.DetsLog
   alias Maelstrom.Kv
 
@@ -34,6 +35,7 @@ defmodule Maelstrom.Node do
   alias Vsr.Message.GetState
   alias Vsr.Message.NewState
   alias Vsr.Message.ClientRequest
+  alias Vsr.Message.Heartbeat
 
   defstruct [
     :node_id,
@@ -72,7 +74,8 @@ defmodule Maelstrom.Node do
     ViewChangeOk,
     GetState,
     NewState,
-    ClientRequest
+    ClientRequest,
+    Heartbeat
   ]
 
   def message(server \\ __MODULE__, message)
@@ -109,7 +112,8 @@ defmodule Maelstrom.Node do
           do_cas(cas, message, state)
 
         %struct{} when struct in @vsr_messages ->
-          raise "you gotta handle the vsr messages!"
+          # Forward VSR messages to the VSR replica process using VSR API
+          Vsr.Message.vsr_send(state.vsr_replica, message.body)
           state
 
         _ ->
@@ -122,6 +126,8 @@ defmodule Maelstrom.Node do
 
   defp do_init(%{node_id: node_id, node_ids: node_ids} = init, message, state) do
     Logger.info("Initializing Maelstrom node #{node_id} with cluster: #{inspect(node_ids)}")
+
+    GlobalData.register(node_id)
 
     # Update VSR with cluster information
     Vsr.set_cluster(state.vsr_replica, node_ids)
