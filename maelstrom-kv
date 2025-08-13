@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Clean and Run Maelstrom
+# This script cleans up DETS files, compiles the project, and runs Maelstrom tests
+
+NODE_COUNT=${1:-3}  # Default to 3 nodes if not specified
+
+echo "Cleaning DETS files..."
+rm -f n*_log.dets
+
+echo "Compiling project..."
+MIX_ENV=maelstrom mix compile
+
+echo "Running Maelstrom test with $NODE_COUNT nodes..."
+exec java -jar maelstrom.jar test -w lin-kv --bin ./run-vsr-node --node-count $NODE_COUNT --time-limit 10 --concurrency 6

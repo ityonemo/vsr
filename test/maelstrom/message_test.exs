@@ -522,12 +522,15 @@ defmodule Maelstrom.Node.MessageTest do
     end
 
     test "VSR messages can be JSON encoded" do
+      from_tuple = {self(), make_ref()}
+      from_hash = :erlang.phash2(from_tuple)
+
       prepare = %Prepare{
         view: 1,
         op_number: 5,
         operation: ["write", "key", "value"],
         commit_number: 4,
-        from: "ref"
+        from: from_tuple
       }
 
       message = Message.new("n0", "n1", prepare)
@@ -544,9 +547,12 @@ defmodule Maelstrom.Node.MessageTest do
                  "op_number" => 5,
                  "operation" => ["write", "key", "value"],
                  "commit_number" => 4,
-                 "from" => "ref"
+                 "from" => ^from_hash
                }
              } = decoded
+
+      # Verify the original tuple can be retrieved from GlobalData
+      assert {:ok, ^from_tuple} = Maelstrom.GlobalData.fetch(from_hash)
     end
   end
 
@@ -571,6 +577,9 @@ defmodule Maelstrom.Node.MessageTest do
     end
 
     test "VSR prepare message round-trip" do
+      # Use a realistic scenario where from is already a hash (as it would be in Maelstrom)
+      from_hash = 123_456_789
+
       original_json = %{
         "src" => "n0",
         "dest" => "n1",
@@ -580,7 +589,7 @@ defmodule Maelstrom.Node.MessageTest do
           "op_number" => 5,
           "operation" => ["write", "key", "value"],
           "commit_number" => 4,
-          "from" => "client_ref"
+          "from" => from_hash
         }
       }
 

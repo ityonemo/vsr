@@ -4,13 +4,17 @@
 # Normal Operation Messages
 defimpl JSON.Encoder, for: Vsr.Message.Prepare do
   alias Maelstrom.GlobalData
+
   def encode(%Vsr.Message.Prepare{} = prepare, opts) do
     prepare
     |> Map.from_struct()
     |> Map.put("type", "prepare")
-    |> Map.update!(:from, &GlobalData.store_from/1)
+    |> Map.update!(:from, &maybe_encode_from/1)
     |> JSON.Encoder.encode(opts)
   end
+
+  defp maybe_encode_from(from) when is_integer(from), do: from
+  defp maybe_encode_from(from) when is_tuple(from), do: GlobalData.store_from(from)
 end
 
 defimpl JSON.Encoder, for: Vsr.Message.PrepareOk do
@@ -99,13 +103,17 @@ end
 # Client Messages  
 defimpl JSON.Encoder, for: Vsr.Message.ClientRequest do
   alias Maelstrom.GlobalData
+
   def encode(%Vsr.Message.ClientRequest{} = client_request, opts) do
     client_request
     |> Map.from_struct()
     |> Map.put("type", "client_request")
-    |> Map.update!(:from, &GlobalData.store_from/1)
+    |> Map.update!(:from, &maybe_encode_from/1)
     |> JSON.Encoder.encode(opts)
   end
+
+  defp maybe_encode_from(from) when is_integer(from), do: from
+  defp maybe_encode_from(from) when is_tuple(from), do: GlobalData.store_from(from)
 end
 
 # Control Messages

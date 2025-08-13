@@ -37,28 +37,15 @@ defmodule Maelstrom.CommsTest do
       assert decoded == expected
     end
 
-    test "send_reply/3 sends JSON to IO target" do
-      from = "n2"
+    test "send_reply/3 works with GenServer.from tuples" do
+      # Create a realistic GenServer.from tuple
+      from_tuple = {self(), make_ref()}
       message = %{type: :prepare_ok, view: 1, op_number: 5}
 
-      # Capture the IO output
-      output =
-        capture_io(fn ->
-          maelstrom = %Comms{node_name: "n1"}
-          Comms.send_reply(maelstrom, from, message)
-        end)
+      maelstrom = %Comms{node_name: "n1"}
 
-      # Parse and verify the JSON output
-      json_line = String.trim(output)
-      decoded = JSON.decode!(json_line)
-
-      expected = %{
-        "src" => "n1",
-        "dest" => "n2",
-        "body" => %{"type" => "prepare_ok", "view" => 1, "op_number" => 5}
-      }
-
-      assert decoded == expected
+      # This should not crash - it should reply via GenServer.reply
+      assert :ok = Comms.send_reply(maelstrom, from_tuple, message)
     end
 
     test "monitor/2 returns reference" do

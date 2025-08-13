@@ -21,7 +21,6 @@ defmodule Maelstrom.Node do
   alias Maelstrom.Comms
   alias Maelstrom.GlobalData
   alias Maelstrom.DetsLog
-  alias Maelstrom.Kv
 
   # VSR messages
   alias Vsr.Message.Prepare
@@ -129,8 +128,20 @@ defmodule Maelstrom.Node do
 
     GlobalData.register(node_id)
 
-    # Update VSR with cluster information
-    Vsr.set_cluster(state.vsr_replica, node_ids)
+    replicas =
+      node_ids
+      |> MapSet.new()
+      |> MapSet.delete(node_id)
+
+    # Initialize VSR replica with the node's ID and cluster information
+    cluster_size = MapSet.size(replicas) + 1
+
+    Vsr.update(state.vsr_replica,
+      replicas: replicas,
+      cluster_size: cluster_size,
+      comms: %Comms{node_name: node_id},
+      log: DetsLog._new(node_id)
+    )
 
     Message.reply(init, to: message)
 
@@ -151,8 +162,8 @@ defmodule Maelstrom.Node do
     # Execute read operation through VSR
     case Vsr.client_request(state.vsr_replica, ["read", key]) do
       {:ok, value} ->
+        # Reply directly with read_ok
         Message.reply(read, to: message, value: value)
-
         state
 
       {:error, :not_found} ->
@@ -167,8 +178,8 @@ defmodule Maelstrom.Node do
     # Execute write operation through VSR
     case Vsr.client_request(state.vsr_replica, ["write", key, value]) do
       :ok ->
+        # Reply directly with write_ok
         Message.reply(write, to: message)
-
         state
 
       {:error, _reason} ->
@@ -176,12 +187,12 @@ defmodule Maelstrom.Node do
     end
   end
 
-  defp do_cas(%Cas{key: key, from: from, to: to} = cas, message, state) do
+  defp do_cas(%Cas{key: key, from: cas_from, to: to} = cas, message, state) do
     # Execute CAS operation through VSR
-    case Vsr.client_request(state.vsr_replica, ["cas", key, from, to]) do
+    case Vsr.client_request(state.vsr_replica, ["cas", key, cas_from, to]) do
       :ok ->
+        # Reply directly with cas_ok
         Message.reply(cas, to: message)
-
         state
 
       {:error, :precondition_failed} ->

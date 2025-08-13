@@ -107,14 +107,18 @@ defmodule Vsr do
   end
 
   # Section 2: API
+  @spec update(pid(), keyword()) :: :ok
   @spec connect(pid(), pid()) :: :ok | {:error, term()}
   @spec client_request(pid(), term()) :: :ok
   @spec start_view_change(pid()) :: :ok
   @spec get_state(pid()) :: term()
-  @spec set_cluster(pid(), [term()]) :: :ok
 
   # debug api
   @spec dump(pid()) :: %__MODULE__{}
+
+  def update(pid, kv), do: GenServer.call(pid, {:update, kv})
+
+  defp update_impl(kv, _from, state), do: {:reply, :ok, struct!(state, kv)}
 
   # Section 2: API Impls
   def connect(pid, to_pid), do: GenServer.call(pid, {:connect, to_pid})
@@ -584,7 +588,7 @@ defmodule Vsr do
       if vote_count > div(connected_replicas, 2) and
            length(existing_votes) <= div(connected_replicas, 2) do
         # Just reached enough votes, send DO-VIEW-CHANGE to new primary
-        new_primary = primary_for_view(ack.view, state.replicas)
+        new_primary = primary_for_view(ack.view, state.replicas, state.comms)
 
         Comms.send_to(state.comms, new_primary, %DoViewChange{
           view: ack.view,
@@ -683,7 +687,7 @@ defmodule Vsr do
       }
 
       # Send VIEW-CHANGE-OK to new primary
-      new_primary = primary_for_view(start_view.view, state.replicas)
+      new_primary = primary_for_view(start_view.view, state.replicas, state.comms)
 
       Comms.send_to(state.comms, new_primary, %ViewChangeOk{
         view: start_view.view,
@@ -754,13 +758,6 @@ defmodule Vsr do
   def start_view_change(pid), do: GenServer.cast(pid, :start_view_change)
 
   def get_state(pid), do: GenServer.call(pid, :get_state)
-  def set_cluster(pid, node_ids), do: GenServer.call(pid, {:set_cluster, node_ids})
-
-  defp set_cluster_impl(node_ids, _from, state) do
-    cluster_size = length(node_ids)
-    new_state = %{state | cluster_size: cluster_size, replicas: MapSet.new(node_ids)}
-    {:reply, :ok, new_state}
-  end
 
   # Debug impls
 
@@ -780,12 +777,14 @@ defmodule Vsr do
 
   # Section 3: Helper functions
 
-  defp primary?(state), do: self() == primary_for_view(state.view_number, state.replicas)
+  defp primary?(%{comms: comms} = state) do
+    Comms.node_id(comms) == primary(state)
+  end
 
-  defp primary(state), do: primary_for_view(state.view_number, state.replicas)
+  defp primary(state), do: primary_for_view(state.view_number, state.replicas, state.comms)
 
-  defp primary_for_view(view_number, replicas) do
-    all_replicas = [self() | MapSet.to_list(replicas)]
+  defp primary_for_view(view_number, replicas, comms) do
+    all_replicas = [Comms.node_id(comms) | MapSet.to_list(replicas)]
     sorted_replicas = Enum.sort(all_replicas)
     replica_count = length(sorted_replicas)
 
@@ -863,6 +862,8 @@ defmodule Vsr do
 
   def handle_call(:dump, from, state), do: dump_impl(from, state)
 
+  def handle_call({:update, kv}, from, state), do: update_impl(kv, from, state)
+
   def handle_call({:connect, to_who}, from, state), do: connect_impl(to_who, from, state)
 
   def handle_call({:client_request, operation}, from, state),
@@ -870,9 +871,6 @@ defmodule Vsr do
 
   def handle_call({:client_request, operation, client_pid, request_id}, from, state),
     do: client_request_impl(operation, client_pid, request_id, from, state)
-
-  def handle_call({:set_cluster, node_ids}, from, state),
-    do: set_cluster_impl(node_ids, from, state)
 
   def handle_cast({:vsr, %type{} = msg}, state) do
     case type do
