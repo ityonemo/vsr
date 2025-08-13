@@ -13,6 +13,13 @@ defprotocol Vsr.Comms do
   @spec send_to(t, id :: id, message :: term) :: term
   def send_to(comms, id, message)
 
+  @spec node_id(t) :: id
+  @doc """
+  Returns the node identifier for this communications module.
+  Must be called from the VSR process.
+  """
+  def node_id(comms)
+
   @spec send_reply(t, from :: id, message :: term) :: term
   def send_reply(comms, from, message)
 
@@ -55,6 +62,9 @@ defmodule Vsr.StdComms do
 
   @impl true
   def send_reply(_, from, message), do: GenServer.reply(from, message)
+
+  @impl true
+  def node_id(_), do: self()
 
   @impl true
   def initial_cluster(comms), do: Enum.flat_map(Node.list(), &attempt_connect(comms, &1))

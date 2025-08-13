@@ -29,6 +29,7 @@ defmodule Maelstrom.Comms do
     case GlobalData.fetch(node_name) do
       {:ok, pid} ->
         Node.message(pid, message)
+
       :error ->
         raise "Node #{node_name} not registered"
     end
@@ -47,10 +48,14 @@ defmodule Maelstrom.Comms do
         from
         |> GlobalData.pop!()
         |> GenServer.reply(message)
+
       genserver_from ->
         GenServer.reply(genserver_from, message)
     end
   end
+
+  @impl true
+  def node_id(%{node_name: node_name}), do: node_name
 
   # Send JSON message to IO target
   defp send_stdout(message) do

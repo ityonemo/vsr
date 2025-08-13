@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# VSR Maelstrom Node Runner
+# This script starts a VSR node that communicates with Maelstrom via JSON over stdin/stdout
+
+# Get the absolute path to the VSR project directory
+VSR_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$VSR_DIR"
+
+export MIX_ENV=maelstrom
+
+# Run the VSR application in Maelstrom mode
+exec elixir -S mix run --no-halt

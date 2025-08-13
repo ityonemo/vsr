@@ -8,8 +8,21 @@ defmodule Maelstrom.Application do
 
   use Application
 
+  require Logger
+
   def start(_type, _args) do
+    # loglevel = System.get_env("LOG_LEVEL", "error")
+
+    {:ok, handler_config} = :logger.get_handler_config(:default)
+    stderr_config = put_in(handler_config, [:config, :type], :standard_error)
+
+    :ok = :logger.remove_handler(:default)
+    :ok = :logger.add_handler(:default, :logger_std_h, stderr_config)
+
+    Logger.info("Starting...")
+
     children = [
+      {Vsr, state_machine: Maelstrom.Kv},
       Maelstrom.Node,
       Maelstrom.Stdin,
       Maelstrom.GlobalData,

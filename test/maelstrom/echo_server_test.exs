@@ -10,7 +10,11 @@ defmodule Maelstrom.EchoServerTest do
   setup t do
     vsr =
       start_supervised!(
-        {Vsr, name: :"#{t.test}-vsr", comms: %Maelstrom.Comms{node_name: "n1"}, state_machine: Kv, log: []}
+        {Vsr,
+         name: :"#{t.test}-vsr",
+         comms: %Maelstrom.Comms{node_name: "n1"},
+         state_machine: Kv,
+         log: []}
       )
 
     pid = start_supervised!({Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: vsr})
@@ -19,9 +23,12 @@ defmodule Maelstrom.EchoServerTest do
 
   @tag :maelstrom
   test "echo server responds to echo messages with echo_ok", %{pid: pid} do
-    # Use capture_io to trap the JSON response sent to stdout
+    # Use capture_io and set group leader to capture IO from the node process
     output =
       capture_io(fn ->
+        # Set the group leader so IO from the node process gets captured
+        Process.group_leader(pid, Process.group_leader())
+
         # First initialize the node using proper Maelstrom structs
         init_body = %Init{
           msg_id: 1,
@@ -44,7 +51,7 @@ defmodule Maelstrom.EchoServerTest do
         assert :ok = Maelstrom.Node.message(pid, echo_json)
 
         # Give the GenServer time to process and respond
-        :timer.sleep(50)
+        :timer.sleep(100)
       end)
 
     # Parse and verify the responses
@@ -90,6 +97,9 @@ defmodule Maelstrom.EchoServerTest do
     # Send multiple echo messages and capture all responses
     output =
       capture_io(fn ->
+        # Set the group leader so IO from the node process gets captured
+        Process.group_leader(pid, Process.group_leader())
+
         # Initialize the node first using proper Maelstrom structs
         init_body = %Init{
           msg_id: 1,

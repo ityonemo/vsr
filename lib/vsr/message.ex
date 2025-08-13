@@ -79,7 +79,7 @@ defmodule Vsr.Message do
   This function provides a clean interface for sending structured
   VSR messages between replicas with proper error handling.
   """
-  def vsr_send(target_pid, message) when is_pid(target_pid) do
-    GenServer.cast(target_pid, {:vsr, message})
+  def vsr_send(server, message) do
+    GenServer.cast(server, {:vsr, message})
   end
 end

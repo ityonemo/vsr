@@ -4,8 +4,16 @@ defmodule Maelstrom.Stdin do
 
   def start_link(_), do: Task.start_link(__MODULE__, :loop, [])
 
+  @new_state elem(:json.decode_start("", :ok, %{}), 1)
+
   def loop do
-    case IO.read(:stdio, :line) do
+    Logger.info("Starting stdin reader...")
+    loop(@new_state)
+  end
+
+  defp loop(state) do
+    res = IO.read(:stdio, 1)
+    case res do
       :eof ->
         Logger.info("STDIN closed, shutting down")
         System.halt(0)
@@ -14,8 +22,18 @@ defmodule Maelstrom.Stdin do
         Logger.error("Error reading from STDIN: #{inspect(reason)}")
         System.halt(1)
 
-      line when is_binary(line) ->
-        Maelstrom.Node.message(line)
+      byte ->
+        case :json.decode_continue(byte, state) do
+          {:continue, new_state} ->
+            loop(new_state)
+          {result, _acc, _} ->
+            msg = JSON.encode!(result)
+
+            Logger.debug("Received JSON from stdin: #{msg}")
+            
+            Maelstrom.Node.message(msg)
+            loop(@new_state)
+        end
     end
   end
 end

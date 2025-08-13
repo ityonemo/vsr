@@ -29,10 +29,12 @@ defmodule Maelstrom.NodeTest do
 
   defp setup_server(t, vsr_expectation) do
     this = self()
-    listener = spawn_link(fn -> 
-      vsr_expectation.()
-      send(this, :done)
-    end)
+
+    listener =
+      spawn_link(fn ->
+        vsr_expectation.()
+        send(this, :done)
+      end)
 
     {Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: listener}
     |> start_supervised!()
@@ -110,6 +112,7 @@ defmodule Maelstrom.NodeTest do
                output
                |> String.split("\n", parts: 2)
                |> Enum.map(&JSON.decode!/1)
+
       assert_done()
     end
 
