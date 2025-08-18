@@ -11,11 +11,15 @@ defmodule Maelstrom.Comms do
 
   use Vsr.Comms
 
+  require Logger
   alias Maelstrom.GlobalData
   alias Maelstrom.Node
   alias Maelstrom.Node.Message
 
   @type id :: String.t()
+  @type encoded_from :: %{optional(String.t()) => term}
+  # "node_name" => String.t()
+  # "from" => non_neg_integer()
 
   # it is not possible for Maelstrom to provide a cluster at initialization time,
   # as it is only notified of the cluster AFTER initialization.
@@ -28,7 +32,10 @@ defmodule Maelstrom.Comms do
   def send_to(%{node_name: node_name}, node_name, message) do
     case GlobalData.fetch(node_name) do
       {:ok, pid} ->
-        Node.message(pid, message)
+        # Wrap local messages in same format as remote messages
+        node_name
+        |> Message.new(node_name, message)
+        |> then(&Node.message(pid, &1))
 
       :error ->
         raise "Node #{node_name} not registered"
@@ -42,16 +49,26 @@ defmodule Maelstrom.Comms do
   end
 
   @impl true
-  def send_reply(_, from, message) do
-    case from do
-      from when is_integer(from) ->
-        from
-        |> GlobalData.pop!()
-        |> GenServer.reply(message)
+  def send_reply(%{node_name: node_name}, %{"node" => node_name, "from" => from}, message) do
+    from
+    |> GlobalData.pop!()
+    |> GenServer.reply(message)
+  end
 
-      genserver_from ->
-        GenServer.reply(genserver_from, message)
-    end
+  def send_reply(%{node_name: node_name}, %{"node" => target_node, "from" => from_hash}, message)
+      when target_node != node_name do
+    # Send ForwardedReply to the target node
+    node_name
+    |> Message.new(target_node, %Maelstrom.Node.ForwardedReply{
+      from_hash: from_hash,
+      result: message
+    })
+    |> send_stdout()
+  end
+
+  @impl true
+  def encode_from(%{node_name: node_name}, from) do
+    %{"node" => node_name, "from" => GlobalData.store_from(from)}
   end
 
   @impl true
@@ -61,6 +78,7 @@ defmodule Maelstrom.Comms do
   defp send_stdout(message) do
     message
     |> JSON.encode!()
+    |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
     |> IO.puts()
   end
 

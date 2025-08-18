@@ -13,6 +13,7 @@ defmodule Maelstrom.Stdin do
 
   defp loop(state) do
     res = IO.read(:stdio, 1)
+
     case res do
       :eof ->
         Logger.info("STDIN closed, shutting down")
@@ -26,12 +27,18 @@ defmodule Maelstrom.Stdin do
         case :json.decode_continue(byte, state) do
           {:continue, new_state} ->
             loop(new_state)
-          {result, _acc, _} ->
-            msg = JSON.encode!(result)
 
-            Logger.debug("Received JSON from stdin: #{msg}")
-            
-            Maelstrom.Node.message(msg)
+          {result, _acc, ""} ->
+            Task.Supervisor.start_child(
+              Maelstrom.Supervisor,
+              fn ->
+                result
+                |> JSON.encode!()
+                |> tap(&Logger.debug("Decoded Maelstrom message: #{&1}"))
+                |> Maelstrom.Node.message()
+              end
+            )
+
             loop(@new_state)
         end
     end

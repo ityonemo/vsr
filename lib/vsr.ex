@@ -135,10 +135,22 @@ defmodule Vsr do
     {:reply, :ok, new_state}
   end
 
-  def client_request(pid, operation), do: GenServer.call(pid, {:client_request, operation})
+  def client_request(pid, operation) do
+    request_id = make_ref()
+    Logger.debug("Client request (#{inspect(request_id)}): #{inspect(operation)}")
 
-  def client_request(pid, operation, request_id),
-    do: GenServer.call(pid, {:client_request, operation, self(), request_id})
+    pid
+    |> GenServer.call({:client_request, operation}, 15_000)
+    |> tap(&Logger.debug("Client request (#{inspect(request_id)}) response: #{inspect(&1)}"))
+  end
+
+  def client_request(pid, operation, request_id) do
+    Logger.debug("Client request: (#{request_id}) #{inspect(operation)}")
+
+    pid
+    |> GenServer.call({:client_request, operation, self(), request_id}, 15_000)
+    |> tap(&Logger.debug("Client request (#{request_id}) response: #{inspect(&1)}"))
+  end
 
   defp client_request_impl(operation, from, state) do
     has_quorum = quorum?(state)
@@ -209,7 +221,7 @@ defmodule Vsr do
         client_request_impl(
           %ClientRequest{
             operation: operation,
-            from: from,
+            from: Comms.encode_from(state.comms, from),
             read_only: read_only,
             client_key: client_key
           },
@@ -222,7 +234,7 @@ defmodule Vsr do
 
         Comms.send_to(state.comms, primary_pid, %ClientRequest{
           operation: operation,
-          from: from,
+          from: Comms.encode_from(state.comms, from),
           read_only: read_only,
           client_key: client_key
         })
@@ -241,7 +253,11 @@ defmodule Vsr do
 
       is_primary ->
         client_request_impl(
-          %ClientRequest{operation: operation, from: from, read_only: read_only},
+          %ClientRequest{
+            operation: operation,
+            from: Comms.encode_from(state.comms, from),
+            read_only: read_only
+          },
           state
         )
 
@@ -251,7 +267,7 @@ defmodule Vsr do
 
         Comms.send_to(state.comms, primary_pid, %ClientRequest{
           operation: operation,
-          from: from,
+          from: Comms.encode_from(state.comms, from),
           read_only: read_only
         })
 
@@ -318,6 +334,7 @@ defmodule Vsr do
       op_number: state.op_number,
       operation: operation,
       commit_number: state.commit_number,
+      # Pass original client's encoded from for replies
       from: from
     }
   end
@@ -388,7 +405,7 @@ defmodule Vsr do
         get_state_msg = %GetState{
           view: state.view_number,
           op_number: state.op_number,
-          sender: self()
+          sender: Comms.node_id(state.comms)
         }
 
         Comms.send_to(state.comms, primary_pid, get_state_msg)
@@ -402,7 +419,7 @@ defmodule Vsr do
     Comms.send_to(state.comms, primary_pid, %PrepareOk{
       view: prepare.view,
       op_number: prepare.op_number,
-      replica: self()
+      replica: Comms.node_id(state.comms)
     })
   end
 
@@ -435,14 +452,22 @@ defmodule Vsr do
       # Apply all operations up to commit point and send client replies
       log_entries = Log.get_all(state.log)
 
-      {new_state_machine, _} =
-        apply_operations_and_send_replies(
+      {new_state_machine, operation_results} =
+        apply_operations(
           log_entries,
           state.state_machine,
           state.commit_number,
-          new_commit_number,
-          comms
+          new_commit_number
         )
+
+      # Send replies for newly committed operations
+      send_client_replies_for_committed_operations(
+        log_entries,
+        operation_results,
+        state.commit_number,
+        new_commit_number,
+        comms
+      )
 
       # Send commit messages to connected replicas
       commit_message = %Commit{
@@ -469,12 +494,39 @@ defmodule Vsr do
     end
   end
 
-  defp apply_operations_and_send_replies(
+  # Send client replies for operations that were just committed by the primary
+  defp send_client_replies_for_committed_operations(
          log_entries,
-         state_machine,
+         operation_results,
          old_commit_number,
          new_commit_number,
          comms
+       ) do
+    # Create a map of op_number -> result for quick lookup
+    results_map = Map.new(operation_results)
+
+    # Find operations to send replies for
+    log_entries
+    |> Enum.filter(fn entry ->
+      entry.op_number > old_commit_number and entry.op_number <= new_commit_number
+    end)
+    |> Enum.sort_by(& &1.op_number)
+    |> Enum.each(fn entry ->
+      # Only send reply if this entry has a sender_id (client request)
+      if entry.sender_id do
+        case Map.get(results_map, entry.op_number) do
+          nil -> :ok  # No result for this operation
+          result -> Comms.send_reply(comms, entry.sender_id, result)
+        end
+      end
+    end)
+  end
+
+  defp apply_operations(
+         log_entries,
+         state_machine,
+         old_commit_number,
+         new_commit_number
        ) do
     # Find operations to commit
     operations_to_commit =
@@ -485,19 +537,14 @@ defmodule Vsr do
       |> Enum.sort_by(& &1.op_number)
 
     # Apply operations and collect results
-    {final_state_machine, _results} =
+    {final_state_machine, results} =
       Enum.reduce(operations_to_commit, {state_machine, []}, fn entry, {sm, results} ->
         {new_sm, result} = StateMachine._apply_operation(sm, entry.operation)
 
-        # Send reply to client if this is a client request
-        if entry.sender_id do
-          Comms.send_reply(comms, entry.sender_id, result)
-        end
-
-        {new_sm, [result | results]}
+        {new_sm, [{entry.op_number, result} | results]}
       end)
 
-    {final_state_machine, :ok}
+    {final_state_machine, Enum.reverse(results)}
   end
 
   defp commit_impl(commit, state) do
@@ -509,12 +556,11 @@ defmodule Vsr do
       log_entries = Log.get_all(state.log)
 
       {new_state_machine, _} =
-        apply_operations_and_send_replies(
+        apply_operations(
           log_entries,
           state.state_machine,
           state.commit_number,
-          commit.commit_number,
-          state.comms
+          commit.commit_number
         )
 
       # Clean up prepare_ok_count for committed operations
@@ -551,7 +597,7 @@ defmodule Vsr do
       # Broadcast START-VIEW-CHANGE-ACK to ALL replicas (including self)
       ack_msg = %StartViewChangeAck{
         view: start_view_change.view,
-        replica: self()
+        replica: Comms.node_id(state.comms)
       }
 
       Enum.each(state.replicas, &Comms.send_to(state.comms, &1, ack_msg))
@@ -596,7 +642,7 @@ defmodule Vsr do
           last_normal_view: state.last_normal_view,
           op_number: state.op_number,
           commit_number: state.commit_number,
-          from: self()
+          from: Comms.node_id(state.comms)
         })
 
         {:noreply, new_state}
@@ -691,7 +737,7 @@ defmodule Vsr do
 
       Comms.send_to(state.comms, new_primary, %ViewChangeOk{
         view: start_view.view,
-        from: self()
+        from: Comms.node_id(state.comms)
       })
 
       {:noreply, new_state}
@@ -901,7 +947,7 @@ defmodule Vsr do
     # Create and broadcast START-VIEW-CHANGE message
     start_view_change_msg = %StartViewChange{
       view: new_view,
-      replica: self()
+      replica: Comms.node_id(state.comms)
     }
 
     # Send to all replicas (including self for consistency)

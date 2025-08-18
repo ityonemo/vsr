@@ -520,6 +520,34 @@ vsr_opts = [
 
 ## Debugging and Error Analysis Guidelines
 
+### Post-Test Analysis Workflow
+
+**CRITICAL**: After every Maelstrom test run, ALWAYS check these files in order:
+
+1. **First: Check `jepsen.log`** - Contains Maelstrom's network-level errors
+   ```bash
+   cat store/lin-kv/latest/jepsen.log
+   ```
+   - Look for "Malformed network message" errors
+   - Look for "missing-required-key" errors  
+   - Look for process startup/teardown issues
+   - **This file reveals network-level problems that node logs might miss**
+
+2. **Second: Check individual node logs** - Contains our application errors
+   ```bash
+   cat store/lin-kv/latest/node-logs/n0.log
+   cat store/lin-kv/latest/node-logs/n1.log  
+   cat store/lin-kv/latest/node-logs/n2.log
+   ```
+   - Look for GenServer crashes and stack traces
+   - Look for "Sending Maelstrom message" vs "Decoded Maelstrom message" patterns
+   - Look for missing expected messages (e.g., if n1 sends prepare_ok to n0, does n0 receive it?)
+
+3. **Pattern Analysis**: Compare what was sent vs received across nodes
+   - If node A sends a message to node B, check if node B received it
+   - Look for gaps in message delivery patterns
+   - Check if crashes occur during message processing
+
 ### Understanding Error Messages
 
 1. **Language Context in Error Messages**
@@ -578,6 +606,75 @@ vsr_opts = [
    - ❌ Debugging VSR logic when the problem is in basic JSON communication
    - ✅ Start with the simplest possible test case
    - **Rule**: Fix lower layers before debugging higher layers
+
+### Running Maelstrom Tests
+
+**Primary Command**: Use the `maelstrom-kv` script for all testing:
+```bash
+./maelstrom-kv
+```
+
+This script runs the lin-kv workload with the following configuration:
+- 3 nodes (n0, n1, n2)
+- 10 second time limit
+- 6 concurrent operations
+- Tests linearizable key-value operations
+
+**Alternative manual command** (for reference only):
+```bash
+lein run test -w lin-kv --bin ./run-vsr-node --node-count 3 --time-limit 10 --concurrency 6
+```
+
+### Post-Test Analysis Workflow
+
+**CRITICAL**: After every Maelstrom test run, ALWAYS check these files in order:
+
+1. **First: Check `jepsen.log`** - Contains Maelstrom's network-level errors
+   ```bash
+   cat store/lin-kv/latest/jepsen.log | grep -i error
+   cat store/lin-kv/latest/jepsen.log | grep -i malformed
+   ```
+
+2. **Second: Check individual node logs** - Contains our application errors  
+   ```bash
+   cat store/lin-kv/latest/node-logs/n0.log
+   cat store/lin-kv/latest/node-logs/n1.log  
+   cat store/lin-kv/latest/node-logs/n2.log
+   ```
+
+3. **Third: CRITICAL Message Flow Verification**
+   
+   **ESSENTIAL**: Always verify that messages are both SENT and RECEIVED correctly:
+
+   a) **Check Message Sending**:
+      ```bash
+      # Look for "Sending Maelstrom message" in each node log
+      grep "Sending.*MESSAGE_TYPE" store/lin-kv/latest/node-logs/n*.log
+      ```
+
+   b) **Check Message Receiving**:
+      ```bash
+      # Look for "Received Maelstrom message" in each node log  
+      grep "Received.*MESSAGE_TYPE" store/lin-kv/latest/node-logs/n*.log
+      ```
+
+   c) **❌ CRITICAL PATTERN**: Messages sent but never received
+      - If node A shows "Sending" but node B never shows "Received"
+      - This indicates a message delivery failure in Maelstrom
+      - Check jepsen.log for malformed message errors
+      - Verify message format has proper `src`, `dest`, and `body` fields
+
+   d) **VSR Protocol Flow Example**:
+      ```bash
+      # Check complete prepare/prepare_ok cycle
+      grep -E "(prepare|commit)" store/lin-kv/latest/node-logs/n*.log | grep -E "(Sending|Received)"
+      ```
+
+4. **Fourth: Look for other patterns**
+   - Malformed message errors: `{:body {}}`
+   - Missing required keys: `:src missing-required-key`
+   - Client timeouts: `Client read timeout`
+   - GenServer timeouts: `time out`
 
 ### Maelstrom-Specific Debugging
 

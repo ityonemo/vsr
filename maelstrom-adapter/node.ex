@@ -16,6 +16,7 @@ defmodule Maelstrom.Node do
   alias Maelstrom.Node.Read
   alias Maelstrom.Node.Write
   alias Maelstrom.Node.Cas
+  alias Maelstrom.Node.ForwardedReply
 
   # maelstrom components
   alias Maelstrom.Comms
@@ -87,7 +88,11 @@ defmodule Maelstrom.Node do
   end
 
   def message(server, message) do
-    GenServer.call(server, {:message, message})
+    Logger.debug("Node Received message: #{JSON.encode!(message)}")
+
+    server
+    |> GenServer.call({:message, message}, 20_000)
+    |> tap(&Logger.debug("Node Processed message: #{JSON.encode!(&1)}"))
   end
 
   defp message_impl(message, _from, state) do
@@ -109,6 +114,9 @@ defmodule Maelstrom.Node do
 
         %Cas{} = cas ->
           do_cas(cas, message, state)
+
+        %ForwardedReply{} = forwarded_reply ->
+          do_forwarded_reply(forwarded_reply, message, state)
 
         %struct{} when struct in @vsr_messages ->
           # Forward VSR messages to the VSR replica process using VSR API
@@ -159,51 +167,65 @@ defmodule Maelstrom.Node do
 
   # KV operation implementations
   defp do_read(%Read{key: key} = read, message, state) do
-    # Execute read operation through VSR
-    case Vsr.client_request(state.vsr_replica, ["read", key]) do
-      {:ok, value} ->
-        # Reply directly with read_ok
-        Message.reply(read, to: message, value: value)
-        state
+    # Execute read operation through VSR in async task
+    Task.Supervisor.start_child(Maelstrom.Supervisor, fn ->
+      case Vsr.client_request(state.vsr_replica, ["read", key]) do
+        {:ok, value} ->
+          # Reply directly with read_ok
+          Message.reply(read, to: message, value: value)
 
-      {:error, :not_found} ->
-        send_error_reply(message, state, 20, "key not found")
+        {:error, :not_found} ->
+          send_error_reply_direct(message, 20, "key not found")
 
-      {:error, _reason} ->
-        send_error_reply(message, state, 13, "temporarily unavailable")
-    end
+        {:error, _reason} ->
+          send_error_reply_direct(message, 13, "temporarily unavailable")
+      end
+    end)
+
+    state
   end
 
   defp do_write(%Write{key: key, value: value} = write, message, state) do
-    # Execute write operation through VSR
-    case Vsr.client_request(state.vsr_replica, ["write", key, value]) do
-      :ok ->
-        # Reply directly with write_ok
-        Message.reply(write, to: message)
-        state
+    # Execute write operation through VSR in async task
+    Task.Supervisor.start_child(Maelstrom.Supervisor, fn ->
+      case Vsr.client_request(state.vsr_replica, ["write", key, value]) do
+        :ok ->
+          # Reply directly with write_ok
+          Message.reply(write, to: message)
 
-      {:error, _reason} ->
-        send_error_reply(message, state, 13, "temporarily unavailable")
-    end
+        {:error, _reason} ->
+          send_error_reply_direct(message, 13, "temporarily unavailable")
+      end
+    end)
+
+    state
   end
 
   defp do_cas(%Cas{key: key, from: cas_from, to: to} = cas, message, state) do
-    # Execute CAS operation through VSR
-    case Vsr.client_request(state.vsr_replica, ["cas", key, cas_from, to]) do
-      :ok ->
-        # Reply directly with cas_ok
-        Message.reply(cas, to: message)
-        state
+    # Execute CAS operation through VSR in async task
+    Task.Supervisor.start_child(Maelstrom.Supervisor, fn ->
+      case Vsr.client_request(state.vsr_replica, ["cas", key, cas_from, to]) do
+        :ok ->
+          # Reply directly with cas_ok
+          Message.reply(cas, to: message)
 
-      {:error, :precondition_failed} ->
-        send_error_reply(message, state, 22, "precondition failed")
+        {:error, :precondition_failed} ->
+          send_error_reply_direct(message, 22, "precondition failed")
 
-      {:error, _reason} ->
-        send_error_reply(message, state, 13, "temporarily unavailable")
-    end
+        {:error, _reason} ->
+          send_error_reply_direct(message, 13, "temporarily unavailable")
+      end
+    end)
+
+    state
   end
 
-  defp send_error_reply(message, state, code, text) do
+  #`defp send_error_reply(message, state, code, text) do
+  #`  send_error_reply_direct(message, code, text)
+  #`  state
+  #`end
+
+  defp send_error_reply_direct(message, code, text) do
     message.dest
     |> Message.new(message.src, %Maelstrom.Node.Error{
       in_reply_to: message.body.msg_id,
@@ -211,7 +233,18 @@ defmodule Maelstrom.Node do
       text: text
     })
     |> JSON.encode!()
+    |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
     |> IO.puts()
+  end
+
+  defp do_forwarded_reply(
+         %ForwardedReply{from_hash: from_hash} = forwarded_reply,
+         _message,
+         state
+       ) do
+    from_hash
+    |> GlobalData.pop!()
+    |> GenServer.reply(ForwardedReply.decode_result(forwarded_reply))
 
     state
   end

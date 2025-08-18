@@ -53,6 +53,8 @@ after
       end
 
       def reply(msg, opts) do
+        require Logger
+
         {parent, fields} = Keyword.pop!(opts, :to)
 
         fields = Keyword.merge(fields, in_reply_to: msg.msg_id)
@@ -60,6 +62,7 @@ after
         parent.dest
         |> Maelstrom.Node.Message.new(parent.src, struct!(Ok, fields))
         |> JSON.encode!()
+        |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
         |> IO.puts()
       end
     end
@@ -73,6 +76,7 @@ after
   alias Maelstrom.Node.Write
   alias Maelstrom.Node.Cas
   alias Maelstrom.Node.Error
+  alias Maelstrom.Node.ForwardedReply
 
   @type node_id :: String.t()
   @type msg_id :: non_neg_integer()
@@ -95,6 +99,7 @@ after
           | Cas.t()
           | Cas.Ok.t()
           | Error.t()
+          | ForwardedReply.t()
           | Vsr.message()
 
   @derive [JSON.Encoder]
@@ -131,6 +136,7 @@ defmodule Maelstrom.Node.Message.Types do
   alias Maelstrom.Node.Write
   alias Maelstrom.Node.Cas
   alias Maelstrom.Node.Error
+  alias Maelstrom.Node.ForwardedReply
 
   # Compile-time mapping of message type strings to modules
   @vsr_messages %{
@@ -156,7 +162,8 @@ defmodule Maelstrom.Node.Message.Types do
                           Read,
                           Write,
                           Cas,
-                          Error
+                          Error,
+                          ForwardedReply
                         ],
                         &{"#{&1.__struct__().type}", &1}
                       )
@@ -174,12 +181,37 @@ defmodule Maelstrom.Node.Message.Types do
 
   @message_types Map.merge(@vsr_messages, @maelstrom_messages) |> Map.merge(@ok_message_map)
 
+  require Logger
+
   # Convert JSON map to appropriate body struct
+  def body_from_json_map(%{"type" => "new_state"} = body) do
+    Vsr.Message.NewState
+    |> body_from_json_map(body)
+    |> Map.update!(:log, &reify_log/1)
+  end
+
   def body_from_json_map(%{"type" => type} = body) do
-    base_struct = Map.fetch!(@message_types, type).__struct__()
+    @message_types
+    |> Map.fetch!(type)
+    |> body_from_json_map(body)
+  end
+
+  defp body_from_json_map(module, body) do
+    base_struct = module.__struct__()
 
     for field <- Map.keys(base_struct), field not in [:__struct__, :type], reduce: base_struct do
       struct -> Map.replace!(struct, field, Map.fetch!(body, "#{field}"))
     end
+  end
+
+  defp reify_log(log) do
+    Enum.map(log, fn entry ->
+      %Vsr.Log.Entry{
+        view: Map.fetch!(entry, "view"),
+        op_number: Map.fetch!(entry, "op_number"),
+        operation: Map.fetch!(entry, "operation"),
+        sender_id: Map.fetch!(entry, "sender_id")
+      }
+    end)
   end
 end

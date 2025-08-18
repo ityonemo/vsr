@@ -8,6 +8,7 @@ defmodule Maelstrom.DetsLog do
   distributed consensus systems like VSR.
   """
 
+  require Logger
   use Vsr.Log
 
   defstruct [:table_name, :dets_file]
@@ -96,6 +97,8 @@ defmodule Maelstrom.DetsLog do
   def replace(%Maelstrom.DetsLog{table_name: table_name} = log, entries) do
     # Clear existing entries
     :ok = :dets.delete_all_objects(table_name)
+
+    Logger.debug("Replacing log entries: #{inspect entries}")
 
     # Insert new entries
     Enum.each(entries, fn entry ->
