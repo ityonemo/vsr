@@ -6,6 +6,7 @@ defprotocol Vsr.Comms do
   """
 
   @type id :: any
+  @type encoded_from :: any
   @type filter :: (any -> boolean)
 
   @type t :: struct
@@ -20,8 +21,11 @@ defprotocol Vsr.Comms do
   """
   def node_id(comms)
 
-  @spec send_reply(t, from :: id, message :: term) :: term
-  def send_reply(comms, from, message)
+  @spec encode_from(t, from :: GenServer.from()) :: encoded_from
+  def encode_from(comms, from)
+
+  @spec send_reply(t, encoded_from, message :: term) :: term
+  def send_reply(comms, encoded_from, message)
 
   @spec initial_cluster(t) :: [id]
   def initial_cluster(comms)
@@ -55,7 +59,7 @@ defmodule Vsr.StdComms do
   defstruct [:filter, name: Vsr]
 
   @type id :: pid
-  @type from :: GenServer.from()
+  @type encoded_from :: GenServer.from()
 
   @impl true
   def send_to(_, id, message), do: Message.vsr_send(id, message)
@@ -65,6 +69,9 @@ defmodule Vsr.StdComms do
 
   @impl true
   def node_id(_), do: self()
+
+  @impl true
+  def encode_from(_comms, from), do: from
 
   @impl true
   def initial_cluster(comms), do: Enum.flat_map(Node.list(), &attempt_connect(comms, &1))

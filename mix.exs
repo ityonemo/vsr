@@ -17,7 +17,7 @@ defmodule Vsr.MixProject do
     case Mix.env() do
       :maelstrom ->
         [
-          extra_applications: [:logger],
+          extra_applications: [:logger, :sasl],
           mod: {Maelstrom.Application, []}
         ]
 

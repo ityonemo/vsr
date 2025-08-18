@@ -9,16 +9,7 @@ defprotocol Vsr.Log do
   scenarios (in-memory, persistent, distributed, etc.).
   """
 
-  defmodule Entry do
-    defstruct [:view, :op_number, :operation, :sender_id]
-
-    @type t :: %__MODULE__{
-            view: non_neg_integer(),
-            op_number: non_neg_integer(),
-            operation: term(),
-            sender_id: pid()
-          }
-  end
+  alias Vsr.Log.Entry
 
   @type log_entry :: Entry.t()
 
@@ -66,4 +57,16 @@ defprotocol Vsr.Log do
   Clear all entries from the log.
   """
   def clear(log)
+end
+
+defmodule Vsr.Log.Entry do
+  @derive JSON.Encoder
+  defstruct [:view, :op_number, :operation, :sender_id]
+
+  @type t :: %__MODULE__{
+          view: non_neg_integer(),
+          op_number: non_neg_integer(),
+          operation: term(),
+          sender_id: term()
+        }
 end

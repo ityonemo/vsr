@@ -26,7 +26,7 @@ defmodule Maelstrom.Application do
       Maelstrom.Node,
       Maelstrom.Stdin,
       Maelstrom.GlobalData,
-      {DynamicSupervisor, name: Maelstrom.Supervisor, strategy: :one_for_one}
+      {Task.Supervisor, name: Maelstrom.Supervisor, strategy: :one_for_one}
     ]
 
     opts = [strategy: :one_for_one, name: Maelstrom.Application]
