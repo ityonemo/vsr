@@ -2,31 +2,27 @@ defmodule Maelstrom.KvServerTest do
   @moduledoc """
   Tests for Maelstrom Node KV message handling.
 
-  NOTE: KV operations (read/write) are not yet implemented in Maelstrom.Node.
+  NOTE: KV operations (read/write) are not yet implemented in Maelstrom.Message.
   These tests verify message parsing and basic node behavior.
   """
 
-  use ExUnit.Case
-  import ExUnit.CaptureIO
-
-  alias Maelstrom.Kv
-  alias Maelstrom.Node.Message
-  alias Maelstrom.Node.Init
-  alias Maelstrom.Node.Read
-  alias Maelstrom.Node.Write
-  alias Maelstrom.Node.Cas
+  use ExUnit.Case, async: true
 
   setup t do
-    vsr =
-      start_supervised!(
-        {Vsr,
-         name: :"#{t.test}-vsr",
-         comms: %Maelstrom.Comms{node_name: "n1"},
-         state_machine: Kv,
-         log: []}
-      )
+    # Use temporary directory for DETS files
+    temp_dir = System.tmp_dir!()
+    unique_id = System.unique_integer([:positive])
+    node_id = "n1"
+    dets_file = Path.join(temp_dir, "kv_test_#{unique_id}_log.dets")
+    
+    pid =
+      start_supervised!({MaelstromKv, name: :"#{t.test}-node", node_id: node_id, dets_file: dets_file, replicas: []})
 
-    pid = start_supervised!({Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: vsr})
+    # Clean up DETS file on test completion
+    on_exit(fn ->
+      File.rm(dets_file)
+    end)
+
     {:ok, pid: pid}
   end
 
@@ -35,40 +31,14 @@ defmodule Maelstrom.KvServerTest do
     # Test that the node sends proper init_ok and handles KV messages
     # output =
     #  capture_io(fn ->
-    # Initialize the node first using proper Maelstrom structs
-    init_body = %Init{
-      msg_id: 1,
-      node_id: "n1",
-      node_ids: ["n1"]
-    }
+    # Test read operation for non-existent key
+    assert {:error, :not_found} = MaelstromKv.read(pid, "test_key", "c1", 10)
 
-    init_message = Message.new("c1", "n1", init_body)
-    init_json = JSON.encode!(init_message)
-    assert :ok = Maelstrom.Node.message(pid, init_json)
+    # Test write operation
+    assert :ok = MaelstromKv.write(pid, "test_key", "test_value", "c1", 20)
 
-    # Send read message using proper Maelstrom structs
-    read_body = %Read{
-      msg_id: 10,
-      key: "test_key"
-    }
-
-    read_message = Message.new("c1", "n1", read_body)
-    read_json = JSON.encode!(read_message)
-    assert :ok = Maelstrom.Node.message(pid, read_json)
-
-    # Send write message using proper Maelstrom structs
-    write_body = %Write{
-      msg_id: 20,
-      key: "test_key",
-      value: "test_value"
-    }
-
-    write_message = Message.new("c1", "n1", write_body)
-    write_json = JSON.encode!(write_message)
-    assert :ok = Maelstrom.Node.message(pid, write_json)
-
-    # Give time for processing
-    :timer.sleep(50)
+    # Test read operation after write
+    assert {:ok, "test_value"} = MaelstromKv.read(pid, "test_key", "c1", 30)
 
     # Verify node is still alive and responsive after processing KV messages
     assert Process.alive?(pid)
@@ -120,44 +90,15 @@ defmodule Maelstrom.KvServerTest do
   test "kv server responds with init_ok and handles CAS messages", %{pid: pid} do
     # Test basic node functionality without relying on capture_io timing issues
 
-    # Initialize node using proper Maelstrom structs
-    init_body = %Init{
-      msg_id: 1,
-      node_id: "n1",
-      node_ids: ["n1"]
-    }
+    # Test CAS that should fail (key doesn't exist, so value is nil, not "old_value")
+    assert {:error, :precondition_failed} =
+             MaelstromKv.cas(pid, "cas_key", "old_value", "new_value", "c1", 10)
 
-    init_message = Message.new("c1", "n1", init_body)
-    init_json = JSON.encode!(init_message)
-    assert :ok = Maelstrom.Node.message(pid, init_json)
+    # Test CAS that should succeed (key doesn't exist, so value is nil, CAS from nil)
+    assert :ok = MaelstromKv.cas(pid, "cas_key2", nil, "initial_value", "c1", 20)
 
-    # Send CAS message using proper Maelstrom structs
-    cas_body = %Cas{
-      msg_id: 10,
-      key: "cas_key",
-      from: "old_value",
-      to: "new_value"
-    }
-
-    cas_message = Message.new("c1", "n1", cas_body)
-    cas_json = JSON.encode!(cas_message)
-    assert :ok = Maelstrom.Node.message(pid, cas_json)
-
-    # Send another CAS with different values  
-    cas2_body = %Cas{
-      msg_id: 20,
-      key: "cas_key2",
-      # CAS from nil (key doesn't exist)
-      from: nil,
-      to: "initial_value"
-    }
-
-    cas2_message = Message.new("c1", "n1", cas2_body)
-    cas2_json = JSON.encode!(cas2_message)
-    assert :ok = Maelstrom.Node.message(pid, cas2_json)
-
-    # Give time for processing
-    :timer.sleep(100)
+    # Verify the CAS worked by reading the value
+    assert {:ok, "initial_value"} = MaelstromKv.read(pid, "cas_key2", "c1", 30)
 
     # Verify node is still alive after processing CAS messages
     assert Process.alive?(pid)

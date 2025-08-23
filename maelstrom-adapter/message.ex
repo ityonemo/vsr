@@ -1,87 +1,25 @@
-use Protoss
-
-defprotocol Maelstrom.Node.Message do
+defmodule Maelstrom.Message do
   @moduledoc """
   Main Maelstrom message struct with src, dest, and body fields.
 
   All Maelstrom messages follow this format regardless of message type.
   The body field contains the specific message type struct.
-
-  All message types implement a `reply/2` function that sends a reply
-  message, accessible through the `Maelstrom.Node.Message` protocol.
-
-  The opts field *requires* a `:to` key with the message to reply to;
-  and for Ok messages with further payloads, the fields must be set
-  in the `opts` keyword list, with the values being the dialyzer types
-  for the fields.
   """
 
-  def reply(msg, opts)
-after
-  # AVERT YOUR EYES!
-  defmacro __using__(opts) do
-    {type, fields} = Keyword.pop!(opts, :type)
+  alias Maelstrom.Message.Types
 
-    parent =
-      "#{type}"
-      |> String.trim_trailing("_ok")
-      |> String.to_atom()
-
-    types =
-      [
-        type: type,
-        in_reply_to:
-          quote do
-            non_neg_integer()
-          end
-      ] ++ fields
-
-    enforced = Keyword.keys(fields) ++ [:in_reply_to]
-
-    quote do
-      defmodule Ok do
-        @moduledoc """
-        #{unquote(type)} message body sent in response to #{unquote(parent)} message.
-        """
-
-        @derive [JSON.Encoder]
-        @type t :: %__MODULE__{unquote_splicing(types)}
-
-        @enforce_keys unquote(enforced)
-
-        defstruct @enforce_keys ++ [type: unquote(type)]
-      end
-
-      def reply(msg, opts) do
-        require Logger
-
-        {parent, fields} = Keyword.pop!(opts, :to)
-
-        fields = Keyword.merge(fields, in_reply_to: msg.msg_id)
-
-        parent.dest
-        |> Maelstrom.Node.Message.new(parent.src, struct!(Ok, fields))
-        |> JSON.encode!()
-        |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-        |> IO.puts()
-      end
-    end
-  end
-
-  alias Maelstrom.Node.Message.Types
-
-  alias Maelstrom.Node.Init
-  alias Maelstrom.Node.Echo
-  alias Maelstrom.Node.Read
-  alias Maelstrom.Node.Write
-  alias Maelstrom.Node.Cas
-  alias Maelstrom.Node.Error
-  alias Maelstrom.Node.ForwardedReply
+  alias Maelstrom.Message.Init
+  alias Maelstrom.Message.Echo
+  alias Maelstrom.Message.Read
+  alias Maelstrom.Message.Write
+  alias Maelstrom.Message.Cas
+  alias Maelstrom.Message.Error
+  alias Maelstrom.Message.ForwardedReply
 
   @type node_id :: String.t()
   @type msg_id :: non_neg_integer()
 
-  @type message :: %__MODULE__{
+  @type t :: %__MODULE__{
           src: node_id(),
           dest: node_id(),
           body: body()
@@ -124,19 +62,27 @@ after
       body: Types.body_from_json_map(body)
     }
   end
+
+  @doc """
+  Constructs the reply body for a message, based on the GenServer.call response
+  obtained from MaelstromKv server.
+  """
+  def reply(msg, response) do
+    msg.__struct__.reply(msg, response)
+  end
 end
 
 # this module needs to be defined separately to avoid circular dependencies
-defmodule Maelstrom.Node.Message.Types do
+defmodule Maelstrom.Message.Types do
   @moduledoc false
 
-  alias Maelstrom.Node.Init
-  alias Maelstrom.Node.Echo
-  alias Maelstrom.Node.Read
-  alias Maelstrom.Node.Write
-  alias Maelstrom.Node.Cas
-  alias Maelstrom.Node.Error
-  alias Maelstrom.Node.ForwardedReply
+  alias Maelstrom.Message.Init
+  alias Maelstrom.Message.Echo
+  alias Maelstrom.Message.Read
+  alias Maelstrom.Message.Write
+  alias Maelstrom.Message.Cas
+  alias Maelstrom.Message.Error
+  alias Maelstrom.Message.ForwardedReply
 
   # Compile-time mapping of message type strings to modules
   @vsr_messages %{
@@ -168,7 +114,7 @@ defmodule Maelstrom.Node.Message.Types do
                         &{"#{&1.__struct__().type}", &1}
                       )
 
-  # OK message type helpers  
+  # OK message type helpers
   @ok_message_types [Cas, Echo, Init, Read, Write]
 
   # Add OK message types to the message type mapping
@@ -206,7 +152,7 @@ defmodule Maelstrom.Node.Message.Types do
 
   defp reify_log(log) do
     Enum.map(log, fn entry ->
-      %Vsr.Log.Entry{
+      %Vsr.LogEntry{
         view: Map.fetch!(entry, "view"),
         op_number: Map.fetch!(entry, "op_number"),
         operation: Map.fetch!(entry, "operation"),

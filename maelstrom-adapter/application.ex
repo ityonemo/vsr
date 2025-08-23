@@ -22,10 +22,8 @@ defmodule Maelstrom.Application do
     Logger.info("Starting...")
 
     children = [
-      {Vsr, state_machine: Maelstrom.Kv},
-      Maelstrom.Node,
-      Maelstrom.Stdin,
-      Maelstrom.GlobalData,
+      {MaelstromKv, [name: MaelstromKv]},
+      Maelstrom.Stdio,
       {Task.Supervisor, name: Maelstrom.Supervisor, strategy: :one_for_one}
     ]
 

@@ -8,7 +8,10 @@ defmodule Vsr.MixProject do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      aliases: [
+        tidewave: "run --no-halt -e 'Logger.configure(level: :debug); Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'"
+      ]
     ]
   end
 
@@ -35,7 +38,11 @@ defmodule Vsr.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:protoss, "~> 1.1"}
+      {:protoss, "~> 1.1"},
+      {:mox, "~> 1.0", only: :test},
+      # MCP TOOLS
+      {:tidewave, path: "deps/tidewave"}, #"~> 0.4", only: :dev},
+      {:bandit, "~> 1.0", only: :dev},
     ]
   end
 end

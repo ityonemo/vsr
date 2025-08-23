@@ -1,4 +1,4 @@
-defmodule Maelstrom.Node.Error do
+defmodule Maelstrom.Message.Error do
   @moduledoc """
   Error message body for error responses.
   """

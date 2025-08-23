@@ -43,11 +43,11 @@ end
 
 ```elixir
 # Start a VSR replica with a key-value state machine
-{:ok, replica} = Vsr.start_link([
+{:ok, replica} = Vsr.start_link(
   log: [],
   state_machine: VsrKv,
   cluster_size: 3
-])
+)
 
 # Perform operations
 VsrKv.put(replica, "key", "value")
