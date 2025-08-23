@@ -1,23 +1,25 @@
 defmodule Maelstrom.EchoServerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   import ExUnit.CaptureIO
-
-  alias Maelstrom.Node.Message
-  alias Maelstrom.Node.Init
-  alias Maelstrom.Node.Echo
-  alias Maelstrom.Kv
+  alias Maelstrom.Message.Init
+  alias Maelstrom.Message.Echo
 
   setup t do
-    vsr =
-      start_supervised!(
-        {Vsr,
-         name: :"#{t.test}-vsr",
-         comms: %Maelstrom.Comms{node_name: "n1"},
-         state_machine: Kv,
-         log: []}
-      )
+    # Use temporary directory for DETS files
+    temp_dir = System.tmp_dir!()
+    unique_id = System.unique_integer([:positive])
+    node_id = "n1"
+    dets_file = Path.join(temp_dir, "echo_test_#{unique_id}_log.dets")
+    
+    # MaelstromKv must be started through VsrServer since it uses VsrServer
+    pid =
+      start_supervised!({MaelstromKv, name: :"#{t.test}-node", node_id: node_id, dets_file: dets_file, replicas: []})
 
-    pid = start_supervised!({Maelstrom.Node, name: :"#{t.test}-node", vsr_replica: vsr})
+    # Clean up DETS file on test completion
+    on_exit(fn ->
+      File.rm(dets_file)
+    end)
+
     {:ok, pid: pid}
   end
 
@@ -36,9 +38,9 @@ defmodule Maelstrom.EchoServerTest do
           node_ids: ["n1", "n2", "n3"]
         }
 
-        init_message = Message.new("c1", "n1", init_body)
+        init_message = Maelstrom.Message.new("c1", "n1", init_body)
         init_json = JSON.encode!(init_message)
-        assert :ok = Maelstrom.Node.message(pid, init_json)
+        assert :ok = MaelstromKv.message(pid, init_json)
 
         # Now send an echo message using proper Maelstrom structs
         echo_body = %Echo{
@@ -46,9 +48,9 @@ defmodule Maelstrom.EchoServerTest do
           echo: "Hello, world!"
         }
 
-        echo_message = Message.new("c1", "n1", echo_body)
+        echo_message = Maelstrom.Message.new("c1", "n1", echo_body)
         echo_json = JSON.encode!(echo_message)
-        assert :ok = Maelstrom.Node.message(pid, echo_json)
+        assert :ok = MaelstromKv.message(pid, echo_json)
 
         # Give the GenServer time to process and respond
         :timer.sleep(100)
@@ -107,9 +109,9 @@ defmodule Maelstrom.EchoServerTest do
           node_ids: ["n1"]
         }
 
-        init_message = Message.new("c1", "n1", init_body)
+        init_message = Maelstrom.Message.new("c1", "n1", init_body)
         init_json = JSON.encode!(init_message)
-        assert :ok = Maelstrom.Node.message(pid, init_json)
+        assert :ok = MaelstromKv.message(pid, init_json)
 
         # First echo using proper Maelstrom structs
         echo1_body = %Echo{
@@ -117,9 +119,9 @@ defmodule Maelstrom.EchoServerTest do
           echo: "First message"
         }
 
-        echo1_message = Message.new("c1", "n1", echo1_body)
+        echo1_message = Maelstrom.Message.new("c1", "n1", echo1_body)
         echo1_json = JSON.encode!(echo1_message)
-        assert :ok = Maelstrom.Node.message(pid, echo1_json)
+        assert :ok = MaelstromKv.message(pid, echo1_json)
 
         # Second echo using proper Maelstrom structs
         echo2_body = %Echo{
@@ -127,9 +129,9 @@ defmodule Maelstrom.EchoServerTest do
           echo: "Second message"
         }
 
-        echo2_message = Message.new("c1", "n1", echo2_body)
+        echo2_message = Maelstrom.Message.new("c1", "n1", echo2_body)
         echo2_json = JSON.encode!(echo2_message)
-        assert :ok = Maelstrom.Node.message(pid, echo2_json)
+        assert :ok = MaelstromKv.message(pid, echo2_json)
 
         :timer.sleep(100)
       end)

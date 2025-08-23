@@ -90,10 +90,12 @@ end
 
 ### Error Handling
 - **Let it crash**: Follow Erlang/Elixir philosophy - don't code defensively with excessive try/catch
+- **No defensive catch-all branches**: Never use `_ ->` branches in case statements to "handle" unexpected input - let it crash so problems surface in logs
 - **Explicit error tuples**: `{:error, :reason}` not just `:error` for expected error conditions
 - **Consistent patterns**: Always use same error tuple format
 - **Meaningful error reasons**: Use descriptive atoms for error reasons
 - **Crash on invalid input**: Let functions crash on invalid input rather than handling every edge case
+- **No defensive logging**: Don't log warnings for "unhandled" cases - if it's truly unhandled, it should crash
 
 ```elixir
 # Good - let it crash on invalid input
@@ -157,6 +159,48 @@ defp validate_prepare(prepare, state) do
     {:view, _} -> {:error, :stale_view}
     {:op, _} -> {:error, :duplicate_operation}
   end
+end
+```
+
+## Code Style and Syntax
+
+### Keyword Lists
+- **Remove unnecessary brackets**: When keyword lists are the last argument to a function, omit the brackets
+- **❌ Avoid**: `start_supervised!({Module, [option: value, other: data]})`
+- **✅ Use**: `start_supervised!({Module, option: value, other: data})`
+- **Exception**: Brackets are required when the keyword list is not the last argument
+
+```elixir
+# Good - no brackets around keyword list as last argument
+start_supervised!({Vsr.ListKv, node_id: :replica1, cluster_size: 3})
+
+# Good - brackets required when not last argument
+some_function([option: value], other_arg)
+
+# Bad - unnecessary brackets around keyword list
+start_supervised!({Vsr.ListKv, [node_id: :replica1, cluster_size: 3]})
+```
+
+### Module Aliases
+- **Never use `as:`**: Always use individual alias statements without renaming
+- **❌ Avoid**: `alias Some.Long.Module, as: Module`
+- **✅ Use**: `alias Some.Long.Module`
+- **Reasoning**: The `as:` pattern obscures the actual module name and makes code harder to follow
+
+```elixir
+# Good - clear module aliasing
+alias Maelstrom.Message
+alias Maelstrom.Message.Init
+alias Maelstrom.Message.Echo
+
+# Bad - using as: for aliasing
+alias Maelstrom.Message, as: Message
+alias Some.Long.Module, as: Short
+
+# Exception: Only use full module names when there would be naming conflicts
+defmodule MyApp.Message do
+  # Here we'd need to use full names to avoid conflicts with our own Message
+  # But prefer restructuring modules to avoid this situation
 end
 ```
 
@@ -327,6 +371,14 @@ end
 
 ## GenServer Patterns
 
+### handle_call vs handle_cast Guidelines
+- **PREFER handle_call**: Always use `handle_call` by default for synchronous operations
+- **AVOID handle_cast**: Only use `handle_cast` when there is a specific performance or deadlock reason
+- **Performance reasons**: High-throughput scenarios where immediate response is not needed
+- **Deadlock reasons**: When synchronous calls would create circular dependencies
+- **Code clarity**: `handle_call` makes control flow explicit and easier to debug
+- **Error handling**: `handle_call` allows proper error propagation to callers
+
 ### Client/Server Separation
 ```elixir
 # Client API
@@ -344,6 +396,44 @@ defp client_request_impl(operation, from, state) do
   {:reply, result, new_state}
 end
 ```
+
+### Router Pattern
+The Router pattern (as exemplified in VsrServer) separates message routing from message processing:
+
+```elixir
+# ROUTER - Only routes messages to handlers, no processing
+def handle_call({:message, message}, _from, state) do
+  case message.body do
+    %Init{} = init ->
+      do_init(init, message, state)
+      
+    %Echo{} = echo ->
+      do_echo(echo, message, state)
+      
+    # No defensive _ -> branch - let it crash on unexpected input
+  end
+end
+
+# HANDLERS - Do the actual work and return proper GenServer tuples
+defp do_init(init, message, state) do
+  # Process the init message
+  send_reply_if_needed()
+  {:noreply, new_state}
+end
+
+defp do_echo(echo, message, state) do
+  # Process the echo message  
+  send_reply_immediately()
+  {:noreply, new_state}
+end
+```
+
+**Router Pattern Rules:**
+- **Router only routes**: `handle_call` should only pattern match and delegate
+- **Handlers return GenServer tuples**: `{:noreply, state}`, `{:noreply, state, {:client_request, op}}`, etc.
+- **No processing in router**: All business logic goes in `do_*` functions
+- **Let it crash**: No defensive `_ ->` branches in routers
+- **Consistent naming**: Use `do_*` prefix for message handlers
 
 ### State Management
 - **Use structs** for GenServer state with clear field definitions
@@ -375,16 +465,19 @@ end
 - **Test error cases**: Include tests for both success and failure paths
 - **Diagnostic tests**: Include tests that help debug complex distributed scenarios
 - **NEVER use GenServer.* functions in tests**: Tests should only use the public API functions provided by modules, not internal GenServer functions like `GenServer.call`, `GenServer.cast`, `GenServer.reply`, etc.
+- **ALL TESTS MUST BE ASYNC**: Never use `async: false` - all tests must run concurrently. Use unique node IDs and proper test isolation instead of serializing tests.
+- **Do not check process alive status**: Tests should not include `Process.alive?/1` assertions - processes being alive is handled by the supervision tree and is not a meaningful test assertion
+- **NEVER use :sys.get_state or :sys.replace_state**: These functions break encapsulation and create brittle tests. Instead use `dump_state/1` for state inspection or proper public APIs for state modification. Tests using :sys functions are fragile and can break with internal implementation changes.
 
 ### Test Configuration
 ```elixir
 # Explicit configuration in tests
-{:ok, replica} = GenServer.start_link(Vsr, [
+{:ok, replica} = GenServer.start_link(Vsr, 
   log: [],  # Use List log for testing
   state_machine: TestStateMachine,
   comms_module: TestComms,  # Use test comms implementation
   cluster_size: 3
-])
+)
 ```
 
 ## Code Quality
@@ -454,6 +547,46 @@ end
 
 ## Maelstrom Integration Guidelines
 
+### JSON Message Protocol
+
+**CRITICAL**: All VSR protocol messages (except Init) sent over Maelstrom are generated by VSR itself, not by external sources.
+
+#### Message Generation and Parsing Rules
+
+1. **VSR generates all VSR protocol messages**: Prepare, PrepareOk, Heartbeat, Commit, etc. are all created by our VSR code
+2. **Init is the only exception**: This is the only message Maelstrom generates for us
+3. **All other messages are VSR-to-VSR**: They must contain all required fields
+
+#### JSON Decoding Standards
+```elixir
+# CORRECT - Use Map.fetch!/2 for all VSR protocol messages
+%Prepare{
+  view: Map.fetch!(json_map, "view"),
+  op_number: Map.fetch!(json_map, "op_number"),
+  leader_id: Map.fetch!(json_map, "leader_id")  # Must be present
+}
+
+# WRONG - Don't use Map.get/3 with defaults for VSR messages
+%Prepare{
+  leader_id: Map.get(json_map, "leader_id", nil)  # Hides bugs in message generation
+}
+```
+
+**Rationale**: If a required field is missing, it means we have a bug in our message generation code, not a compatibility issue. Let it crash to surface the bug immediately.
+
+#### Test Message Generation
+- **Tests should generate JSON by encoding structs**: Don't hand-write JSON maps
+- **Use proper struct creation**: Ensure all required fields are present
+- **Example**:
+  ```elixir
+  # CORRECT - Generate JSON from struct
+  prepare = %Prepare{view: 1, op_number: 1, leader_id: "n0", ...}
+  json = Message.to_json_map(prepare)
+  
+  # WRONG - Hand-written JSON that might miss fields
+  json = %{"type" => "prepare", "view" => 1}  # Missing leader_id!
+  ```
+
 ### Key Architectural Principles
 
 1. **Durability Strategy**: Log is durable (DETS), state machine is in-memory cache
@@ -487,6 +620,10 @@ end
 # Use these exact commands for testing Maelstrom integration
 MIX_ENV=maelstrom elixir simple_test.exs
 MIX_ENV=maelstrom elixir debug_test.exs
+
+# For regular tests, NEVER use MIX_ENV=test - it's the default
+# ❌ MIX_ENV=test mix test
+# ✅ mix test
 ```
 
 ### Common Maelstrom Mistakes to Avoid
@@ -704,5 +841,73 @@ When debugging fails repeatedly:
 2. **Identify the root misconception** that led to the wrong approach
 3. **Create systematic debugging steps** to avoid the same mistake
 4. **Update coding standards** to prevent similar issues in future
+
+## VSR + Maelstrom Synchronous Operation Flow
+
+**CRITICAL**: All Maelstrom operations (read, write, cas) must be synchronous, following the same pattern as ListKv operations.
+
+### Correct MaelstromKv Operation Flow
+
+1. **do_write/do_cas functions**: 
+   ```elixir
+   defp do_write(%Write{key: key, value: value}, message, genserver_from, state) do
+     operation = ["write", key, value]
+     
+     # Store GenServer from in ETS and create encoded from for VSR
+     from_hash = store_from(state, genserver_from)
+     encoded_from = %{"node" => state.node_id, "from" => from_hash}
+     
+     # Store message for Maelstrom JSON reply later
+     :ets.insert(state.from_table, {"message_#{from_hash}", message})
+     
+     {:noreply, state, {:client_request, encoded_from, operation}}
+   end
+   ```
+   - Store GenServer `from` tuple in ETS table with hash
+   - Create JSON-encoded `from` as `%{"node" => node_id, "from" => from_hash}`
+   - Store Maelstrom message separately for JSON reply generation
+   - Use `{:client_request, encoded_from, operation}` pattern
+
+2. **handle_commit function**:
+   ```elixir
+   def handle_commit(["write", key, value], state, _vsr_state) do
+     new_data = Map.put(state.data, key, value)
+     new_state = %{state | data: new_data}
+     {new_state, :ok}  # VSR handles reply via send_reply callback
+   end
+   ```
+   - Apply operation to state machine
+   - Return `{new_state, result}`
+   - VSR automatically calls `send_reply(from, result, vsr_state)`
+
+3. **send_reply function**: `send_reply(from, reply, vsr_state)`
+   ```elixir
+   def send_reply(%{"node" => node_id, "from" => from_hash} = from, reply, vsr_state) do
+     if node_id == vsr_state.inner.node_id do
+       # Local: retrieve GenServer from and Maelstrom message from ETS
+       {:ok, genserver_from} = fetch_from(vsr_state.inner, from_hash)
+       [{_, message}] = :ets.lookup(vsr_state.inner.from_table, "message_#{from_hash}")
+       
+       # Send Maelstrom JSON reply
+       Message.reply(message.body, to: message, ...)
+       # Send GenServer reply to unblock {:message, message} call  
+       GenServer.reply(genserver_from, :ok)
+     else
+       # Remote: send ForwardedReply across Maelstrom bus
+       send_forwarded_reply(node_id, from_hash, reply)
+     end
+   end
+   ```
+   - **If local**: Lookup both GenServer.from tuple and Maelstrom message from ETS
+   - **Send both replies**: Maelstrom JSON response + GenServer reply to unblock call
+   - **If remote**: Send ForwardedReply message across Maelstrom bus
+
+### Key Insights
+
+- **Synchronous at GenServer level**: The `{:message, message}` call blocks until VSR consensus completes
+- **Maelstrom message is the `from`**: Pass the entire Maelstrom message as `from` parameter to VSR
+- **No separate request tracking**: Don't use `pending_requests` - let VSR handle the flow
+- **send_reply handles distribution**: Translates between GenServer.from tuples and Maelstrom ForwardedReply messages
+- **Signature**: `send_reply(from, reply, vsr_state)` NOT `send_reply(from, reply, inner_state)`
 
 This document serves as the normative standard for all code contributions to the VSR codebase.

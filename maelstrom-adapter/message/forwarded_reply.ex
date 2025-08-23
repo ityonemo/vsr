@@ -1,4 +1,4 @@
-defmodule Maelstrom.Node.ForwardedReply do
+defmodule Maelstrom.Message.ForwardedReply do
   @moduledoc """
   ForwardedReply message for completing GenServer calls across nodes.
 

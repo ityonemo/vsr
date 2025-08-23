@@ -9,7 +9,7 @@ defmodule Vsr.Message do
   # Normal Operation Messages
   defmodule Prepare do
     @moduledoc "PREPARE message sent by primary to backups"
-    defstruct [:view, :op_number, :operation, :commit_number, :from]
+    defstruct [:view, :op_number, :operation, :commit_number, :from, :leader_id]
   end
 
   defmodule PrepareOk do
@@ -56,13 +56,13 @@ defmodule Vsr.Message do
 
   defmodule NewState do
     @moduledoc "NEW-STATE response containing replica state"
-    defstruct [:view, :log, :op_number, :commit_number, :state_machine_state]
+    defstruct [:view, :log, :op_number, :commit_number, :state_machine_state, :leader_id]
   end
 
   # Client Messages
   defmodule ClientRequest do
     @moduledoc "Client request message"
-    defstruct [:operation, :from, :read_only, :client_key]
+    defstruct [:operation, :from, :read_only, :client_key, :client_id, :request_id]
   end
 
   # CLIENT-REPLY is ignored since we can directly reply over erlang message bus.
@@ -70,16 +70,6 @@ defmodule Vsr.Message do
   # Control Messages
   defmodule Heartbeat do
     @moduledoc "Control message for primary to check replica liveness"
-    defstruct []
-  end
-
-  @doc """
-  Send a VSR protocol message to a target replica.
-
-  This function provides a clean interface for sending structured
-  VSR messages between replicas with proper error handling.
-  """
-  def vsr_send(server, message) do
-    GenServer.cast(server, {:vsr, message})
+    defstruct [:view, :leader_id]
   end
 end
