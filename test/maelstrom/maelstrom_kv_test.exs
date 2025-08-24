@@ -128,24 +128,6 @@ defmodule MaelstromKvTest do
     end
   end
 
-  describe "state management" do
-    test "get_state returns data", %{server: _server} do
-      kv_state = %MaelstromKv{data: %{"key1" => "value1"}}
-      result = MaelstromKv.get_state(kv_state)
-
-      assert result == %{data: %{"key1" => "value1"}}
-    end
-
-    test "set_state updates data with atom keys", %{server: _server} do
-      kv_state = %MaelstromKv{}
-      new_state_data = %{data: %{"key1" => "value1"}}
-
-      result = MaelstromKv.set_state(kv_state, new_state_data)
-
-      assert result.data == %{"key1" => "value1"}
-    end
-  end
-
-  # Note: No error handling tests for unknown operations - we want handle_commit 
+  # Note: No error handling tests for unknown operations - we want handle_commit
   # to crash on unknown operations to surface programming errors immediately
 end

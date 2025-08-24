@@ -213,6 +213,10 @@ defmodule MaelstromKv do
     end
   end
 
+  def get_state(state), do: state.data
+
+  def set_state(state, data), do: %{state | data: data}
+
   # Required log callback implementations for DETS storage
   def log_append(log, entry) do
     table_name = log
@@ -238,12 +242,7 @@ defmodule MaelstromKv do
     :dets.select(log, [{{:"$1", :"$2"}, [{:>=, {:map_get, :op_number, :"$2"}, op_number}], [:"$2"]}])
   end
 
-  def log_length(log) doigno
-    case :dets.info(log, :size) do
-      size when is_integer(size) -> size
-      _ -> 0
-    end
-  end
+  def log_length(log), do: :dets.info(log, :size)
 
   def log_replace(log, entries) do
     Logger.debug("Replacing log entries: #{inspect(entries)}")
@@ -260,15 +259,6 @@ defmodule MaelstromKv do
     :ok = :dets.delete_all_objects(log)
     :ok = :dets.sync(log)
     log
-  end
-
-  # State management for VSR
-  def get_state(state) do
-    %{data: state.data}
-  end
-
-  def set_state(state, new_state_data) do
-    %{state | data: new_state_data[:data] || new_state_data["data"] || %{}}
   end
 
   # ETS translation layer for GenServer.from ↔ {node_id, from_hash} mapping
@@ -293,14 +283,6 @@ defmodule MaelstromKv do
       [] ->
         Logger.error("reply failed, could not find hash #{from_hash}")
     end
-  end
-
-  @doc """
-  Remove a GenServer.from tuple from ETS after use.
-  """
-  def delete_from(state, from_hash) do
-    :ets.delete(state.from_table, from_hash)
-    :ok
   end
 
   ## ROUTER
