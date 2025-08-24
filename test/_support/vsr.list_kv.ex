@@ -31,52 +31,53 @@ defmodule Vsr.ListKv do
     {:ok, log, state}
   end
 
-  # VSR commit callback - apply operations to the state machine
-  def handle_commit(operation, state) do
-    case operation do
-      {:read, key} ->
-        result = Map.get(state.data, key)
-        {state, {:ok, result}}
+  defp read_impl(key, state) do
+    result = Map.get(state.data, key)
+    {state, {:ok, result}}
+  end
 
-      {:write, key, value} ->
-        new_data = Map.put(state.data, key, value)
-        new_state = %{state | data: new_data}
-        {new_state, :ok}
+  defp write_impl(key, value, state) do
+    new_data = Map.put(state.data, key, value)
+    new_state = %{state | data: new_data}
+    {new_state, :ok}
+  end
 
-      {:set, key, value} ->
-        # Handle :set operations (alias for :write)
-        new_data = Map.put(state.data, key, value)
-        new_state = %{state | data: new_data}
-        {new_state, {:ok, value}}
+  defp delete_impl(key, state) do
+    new_data = Map.delete(state.data, key)
+    new_state = %{state | data: new_data}
+    {new_state, :ok}
+  end
 
-      {:delete, key} ->
-        new_data = Map.delete(state.data, key)
-        new_state = %{state | data: new_data}
-        {new_state, :ok}
+  defp cas_impl(key, old_value, new_value, state) do
+    current_value = Map.get(state.data, key)
 
-      {:cas, key, old_value, new_value} ->
-        current_value = Map.get(state.data, key)
-
-        if current_value == old_value do
-          new_data = Map.put(state.data, key, new_value)
-          new_state = %{state | data: new_data}
-          {new_state, :ok}
-        else
-          {state, {:error, :cas_failed}}
-        end
-
-      {:test_op, data} ->
-        # Test operation for client deduplication tests
-        {state, {:ok, "test_result_#{data}"}}
-
-      {:increment_counter} ->
-        # Counter increment operation for deduplication tests
-        current_counter = Map.get(state.data, :counter, 0)
-        new_data = Map.put(state.data, :counter, current_counter + 1)
-        new_state = %{state | data: new_data}
-        {new_state, {:ok, current_counter + 1}}
+    if current_value == old_value do
+      new_data = Map.put(state.data, key, new_value)
+      new_state = %{state | data: new_data}
+      {new_state, :ok}
+    else
+      {state, {:error, :cas_failed}}
     end
   end
+
+  defp test_op_impl(data, state) do
+    {state, {:ok, "test_result_#{data}"}}
+  end
+
+  defp increment_counter_impl(state) do
+    current_counter = Map.get(state.data, :counter, 0)
+    new_data = Map.put(state.data, :counter, current_counter + 1)
+    new_state = %{state | data: new_data}
+    {new_state, {:ok, current_counter + 1}}
+  end
+
+  # VSR commit callback - apply operations to the state machine
+  def handle_commit({:read, key}, state), do: read_impl(key, state)
+  def handle_commit({:write, key, value}, state), do: write_impl(key, value, state)
+  def handle_commit({:delete, key}, state), do: delete_impl(key, state)
+  def handle_commit({:cas, key, old_value, new_value}, state), do: cas_impl(key, old_value, new_value, state)
+  def handle_commit({:test_op, data}, state), do: test_op_impl(data, state)
+  def handle_commit(:increment_counter, state), do: increment_counter_impl(state)
 
   # Log callback implementations - required by VsrServer
 
