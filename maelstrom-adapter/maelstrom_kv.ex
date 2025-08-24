@@ -145,7 +145,9 @@ defmodule MaelstromKv do
 
   defp request_with(value, from, state) do
     from_hash = push_from(state, from)
-    encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
+    # Get node_id from VsrServer (not stored in MaelstromKv state)
+    node_id = VsrServer.node_id(self())
+    encoded_from = %{"node" => node_id, "from" => from_hash}
     {:client_request, encoded_from, value}
   end
 
@@ -227,39 +229,16 @@ defmodule MaelstromKv do
   end
 
   def log_get_all(log) do
-    case :dets.traverse(log, fn {_op_number, entry} ->
-           {:continue, entry}
-         end) do
-      [] ->
-        []
-
-      entries when is_list(entries) ->
-        entries
-        |> Enum.sort_by(& &1.op_number)
-
-      {:error, _reason} ->
-        []
-    end
+    # Use select to get all entries efficiently - much faster than foldl
+    :dets.select(log, [{{:"$1", :"$2"}, [], [:"$2"]}])
   end
 
   def log_get_from(log, op_number) do
-    case :dets.traverse(log, fn {_op_num, entry} ->
-           {:continue, entry}
-         end) do
-      [] ->
-        []
-
-      entries when is_list(entries) ->
-        entries
-        |> Enum.filter(&(&1.op_number >= op_number))
-        |> Enum.sort_by(& &1.op_number)
-
-      {:error, _reason} ->
-        []
-    end
+    # Use select with guard to filter entries efficiently
+    :dets.select(log, [{{:"$1", :"$2"}, [{:>=, {:map_get, :op_number, :"$2"}, op_number}], [:"$2"]}])
   end
 
-  def log_length(log) do
+  def log_length(log) doigno
     case :dets.info(log, :size) do
       size when is_integer(size) -> size
       _ -> 0
@@ -267,16 +246,13 @@ defmodule MaelstromKv do
   end
 
   def log_replace(log, entries) do
-    table_name = log
-    :ok = :dets.delete_all_objects(table_name)
-
     Logger.debug("Replacing log entries: #{inspect(entries)}")
 
     Enum.each(entries, fn entry ->
-      :ok = :dets.insert(table_name, {entry.op_number, entry})
+      :ok = :dets.insert(log, {entry.op_number, entry})
     end)
 
-    :ok = :dets.sync(table_name)
+    :ok = :dets.sync(log)
     log
   end
 

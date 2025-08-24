@@ -9,6 +9,7 @@ defmodule Vsr.LogEntry do
   - sender_id: ID of the client that sent this operation (for deduplication)
   """
 
+  @derive JSON.Encoder
   @enforce_keys [:view, :op_number, :operation, :sender_id]
   defstruct @enforce_keys
 

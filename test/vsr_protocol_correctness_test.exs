@@ -475,8 +475,8 @@ defmodule VsrProtocolCorrectnessTest do
       assert {:cached, 51, _} = final_state.client_table[client_id]
     end
 
-    test "older requests from same client are rejected with cached response", %{replica: replica} do
-      # Test that lower request_ids are rejected
+    test "older requests from same client are dropped without reply", %{replica: replica} do
+      # Test that lower request_ids are dropped (per VSR protocol correctness)
       operation = {:test_op, "data"}
       client_id = "test_client_999"
 
@@ -488,12 +488,9 @@ defmodule VsrProtocolCorrectnessTest do
       _result1 = GenServer.call(replica, {:client_request, from1, operation})
       :timer.sleep(100)
 
-      # Send older request - should return cached result
-      _result2 = GenServer.call(replica, {:client_request, from2, operation})
-
-      # If we have a cached result for this older request, return it
-      # Otherwise, this should be rejected or return an error
-      # The exact behavior depends on implementation, but it shouldn't re-execute
+      # Send older request - should be dropped without reply (timeout expected)
+      assert catch_exit(GenServer.call(replica, {:client_request, from2, operation}, 1000)) == 
+        {:timeout, {GenServer, :call, [replica, {:client_request, from2, operation}, 1000]}}
 
       # Verify client table still reflects the newer request
       final_state = VsrServer.dump(replica)

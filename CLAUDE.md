@@ -924,4 +924,36 @@ When debugging fails repeatedly:
 ❌ Never use: `lein run test -w lin-kv ...`
 ✅ Always use: `java -jar maelstrom.jar test -w lin-kv ...`
 
+### Interpreting Maelstrom Test Results
+
+**CRITICAL**: A Maelstrom test run is only valid if there are minimal network timeouts. High numbers of `net-timeout` errors in the jepsen logs indicate fundamental problems with the VSR implementation.
+
+**What to check after every test run**:
+
+1. **Count network timeouts**: `grep -c "net-timeout" store/latest/jepsen.log`
+   
+   **Without nemesis (normal operation)**:
+   - ✅ **0 timeouts**: Ideal - system should respond promptly under normal conditions
+   - ❌ **Any timeouts**: Test run is invalid - indicates performance issues in VSR implementation
+   
+   **With nemesis (partition/failure testing)**:
+   - ✅ **0 timeouts**: Ideal - system maintains availability during faults
+   - ⚠️ **A few timeouts**: May indicate issues, but could be expected.  Correlate the timeouts with network partitions before accepting.
+   - ❌ **Many timeouts**: Test run likely invalid - system failing to handle partitions properly
+
+2. **Common causes of excessive timeouts**:
+   - VSR nodes not forming proper quorum during partitions
+   - Primary election failures
+   - Message delivery issues between VSR nodes
+   - Incorrect view change handling
+   - Missing or broken heartbeat mechanisms
+
+3. **Response to high timeout counts**:
+   - **Do not ignore**: High timeouts mean the test is meaningless
+   - **Investigate logs**: Check node logs for crashes, errors, view changes
+   - **Fix underlying issues**: Address VSR protocol problems before claiming success
+   - **Re-test**: Only accept results from runs with minimal timeouts
+
+**Remember**: Network partitions should cause **some** unavailability (this is correct), but not massive timeout failures across the entire test duration.
+
 This document serves as the normative standard for all code contributions to the VSR codebase.
