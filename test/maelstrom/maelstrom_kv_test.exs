@@ -14,14 +14,18 @@ defmodule MaelstromKvTest do
     node_id = "n0_#{unique_id}"
     dets_file = Path.join(temp_dir, "test_#{unique_id}_log.dets")
 
-    opts = [
-      node_id: node_id,
-      dets_file: dets_file,
-      # No other replicas in unit tests
-      replicas: []
-    ]
+    # Start with basic options - cluster and log will be set afterwards
+    opts = [dets_root: temp_dir]
 
     {:ok, pid} = MaelstromKv.start_link(opts)
+
+    # Set cluster configuration (single-node cluster for unit tests)
+    VsrServer.set_cluster(pid, node_id, [], 1)
+
+    # Set up DETS log
+    table_name = String.to_atom("test_log_#{unique_id}")
+    {:ok, log} = :dets.open_file(table_name, file: String.to_charlist(dets_file))
+    VsrServer.set_log(pid, log)
 
     # Clean up DETS file on test completion
     on_exit(fn ->

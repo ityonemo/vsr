@@ -23,21 +23,31 @@ defmodule MaelstromKv do
 
   defstruct [
     :from_table,
+    dets_root: ".",
     data: %{},
     msg_id_counter: 0,
-    node_id: nil
   ]
 
   @type state :: %__MODULE__{
           from_table: :ets.tid() | nil,
           data: %{term() => term()},
           msg_id_counter: non_neg_integer(),
-          node_id: String.t() | nil
+          dets_root: Path.t()
         }
 
   # Client API
   def start_link(opts \\ []) do
     VsrServer.start_link(__MODULE__, opts)
+  end
+
+  # VsrServer callbacks
+  def init(opts) do
+    # Create ETS table for GenServer.from translation (private, store reference)
+    from_table_ref = :ets.new(__MODULE__, [:set, :private])
+    dets_opts = Keyword.take(opts, [:dets_root])
+    inner_state = struct!(__MODULE__, [from_table: from_table_ref] ++ dets_opts)
+    # Return VSR-compatible init tuple without a log.  Log will be set on init.
+    {:ok, inner_state}
   end
 
   # Client API functions for Maelstrom protocol (convenience wrappers)
@@ -47,6 +57,21 @@ defmodule MaelstromKv do
     from
     |> Message.new(VsrServer.node_id(server), echo_msg)
     |> then(&message(server, &1))
+  end
+
+  # VsrServer callback for sending VSR messages over Maelstrom network
+  def send_vsr(dest_node_id, vsr_message, _inner_state) do
+    # Get the current node ID from VSR server
+    current_node_id = VsrServer.node_id()
+
+    # Create Maelstrom message with VSR message as body
+    # VSR messages already implement JSON.Encoder, so they can be directly encoded
+
+    current_node_id
+    |> Message.new(dest_node_id, vsr_message)
+    |> JSON.encode!()
+    |> tap(&Logger.debug("Sending VSR message: #{&1}"))
+    |> IO.puts()
   end
 
   def read(server, key, from, msg_id) do
@@ -88,34 +113,7 @@ defmodule MaelstromKv do
 
     server
     |> GenServer.call({:message, message}, 20_000)
-    |> tap(&Logger.debug("Node Processed message: #{JSON.encode!(&1)}"))
-  end
-
-  # VsrServer callbacks
-  def init(opts) do
-    # Initialize DETS log directly (no separate DetsLog module)
-    # Use unique default to avoid ETS table name conflicts
-    default_node_id = "default_#{System.unique_integer([:positive])}"
-    node_id = Keyword.get(opts, :node_id, default_node_id)
-    table_name = String.to_atom("maelstrom_log_#{node_id}")
-    dets_file = Keyword.get(opts, :dets_file, "#{node_id}_log.dets")
-
-    # Ensure DETS directory exists
-    dets_dir = Path.dirname(dets_file)
-    File.mkdir_p!(dets_dir)
-
-    # Open or create DETS table
-    {:ok, ^table_name} = :dets.open_file(table_name, file: String.to_charlist(dets_file))
-
-    # Create ETS table for GenServer.from translation (private, store reference)
-    from_table_ref = :ets.new(__MODULE__, [:set, :private])
-
-    # Initialize state with DETS log and empty KV store
-    log = %{table_name: table_name, dets_file: dets_file}
-    inner_state = %__MODULE__{from_table: from_table_ref, node_id: node_id}
-
-    # Return VSR-compatible init tuple
-    {:ok, log, inner_state}
+    |> tap(&Logger.debug("Node Processed message: #{inspect(&1)}"))
   end
 
   # Maelstrom message handlers (integrated from Maelstrom.Node)
@@ -123,7 +121,17 @@ defmodule MaelstromKv do
   defp do_init(%{node_id: node_id, node_ids: node_ids} = init, message, state) do
     Logger.info("Initializing Maelstrom node #{node_id} with cluster: #{inspect(node_ids)}")
 
-    # Node registration is now handled in MaelstromKv init - no separate registration needed
+    # Initialize VSR cluster with the provided node list
+    # Calculate other replicas (excluding self)
+    other_replicas = Enum.reject(node_ids, &(&1 == node_id))
+    cluster_size = length(node_ids)
+    VsrServer.set_cluster(self(), node_id, other_replicas, cluster_size)
+
+    # Open or create DETS table
+    table_name = String.to_atom("maelstrom_log_#{node_id}")
+    dets_file = Path.join(state.dets_root, "#{node_id}.dets")
+    {:ok, log} = :dets.open_file(table_name, file: String.to_charlist(dets_file))
+    VsrServer.set_log(self(), log)
 
     # Send init response
     reply_body = Message.reply(init, :ok)
@@ -157,7 +165,7 @@ defmodule MaelstromKv do
 
     # Store GenServer from in ETS and create encoded from for VSR
     from_hash = store_from(state, from)
-    encoded_from = %{"node" => state.node_id, "from" => from_hash}
+    encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
 
     # Store message for Maelstrom JSON reply later
     :ets.insert(state.from_table, {"message_#{from_hash}", message})
@@ -171,7 +179,7 @@ defmodule MaelstromKv do
 
     # Store GenServer from in ETS and create encoded from for VSR
     from_hash = store_from(state, from)
-    encoded_from = %{"node" => state.node_id, "from" => from_hash}
+    encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
 
     # Store message for Maelstrom JSON reply later
     :ets.insert(state.from_table, {"message_#{from_hash}", message})
@@ -185,7 +193,7 @@ defmodule MaelstromKv do
 
     # Store GenServer from in ETS and create encoded from for VSR
     from_hash = store_from(state, genserver_from)
-    encoded_from = %{"node" => state.node_id, "from" => from_hash}
+    encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
 
     # Store message for Maelstrom JSON reply later
     :ets.insert(state.from_table, {"message_#{from_hash}", message})
@@ -293,14 +301,60 @@ defmodule MaelstromKv do
 
       %{"node" => node_id, "from" => from_hash} ->
         # Legacy format for remote replies via ForwardedReply
-        our_node_id = inner_state.node_id || "unknown"
+        our_node_id = VsrServer.node_id()
 
         if node_id == our_node_id do
           # Local reply using ETS lookup
           case fetch_from(inner_state, from_hash) do
             {:ok, from_tuple} ->
-              delete_from(inner_state, from_hash)
-              GenServer.reply(from_tuple, reply)
+              # Get the original Maelstrom message from ETS
+              case :ets.lookup(inner_state.from_table, "message_#{from_hash}") do
+                [{_, message}] ->
+                  # Send Maelstrom JSON reply based on operation result
+                  case {message.body, reply} do
+                    {%Read{}, {:ok, value}} ->
+                      message.dest
+                      |> Message.new(message.src, Message.reply(message.body, {:ok, value}))
+                      |> JSON.encode!()
+                      |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
+                      |> IO.puts()
+
+                    {%Read{}, {:error, :not_found}} ->
+                      send_error_reply_direct(message, 20, "key not found")
+
+                    {%Write{}, :ok} ->
+                      message.dest
+                      |> Message.new(message.src, Message.reply(message.body, :ok))
+                      |> JSON.encode!()
+                      |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
+                      |> IO.puts()
+
+                    {%Cas{}, :ok} ->
+                      message.dest
+                      |> Message.new(message.src, Message.reply(message.body, :ok))
+                      |> JSON.encode!()
+                      |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
+                      |> IO.puts()
+
+                    {%Cas{}, {:error, :precondition_failed}} ->
+                      send_error_reply_direct(message, 22, "precondition failed")
+
+                    _ ->
+                      send_error_reply_direct(message, 13, "temporarily unavailable")
+                  end
+                  
+                  # Clean up ETS entries
+                  delete_from(inner_state, from_hash)
+                  :ets.delete(inner_state.from_table, "message_#{from_hash}")
+                  
+                  # Send GenServer reply to unblock the call
+                  GenServer.reply(from_tuple, reply)
+
+                [] ->
+                  Logger.error("Local reply: message for from_hash #{from_hash} not found in ETS table")
+                  delete_from(inner_state, from_hash)
+                  GenServer.reply(from_tuple, {:error, :no_message_found})
+              end
 
             {:error, :not_found} ->
               Logger.error("Local reply: from_hash #{from_hash} not found in ETS table")
@@ -325,21 +379,21 @@ defmodule MaelstromKv do
 
   # Required log callback implementations for DETS storage
   def log_append(log, entry) do
-    table_name = log.table_name
+    table_name = log
     :ok = :dets.insert(table_name, {entry.op_number, entry})
     :ok = :dets.sync(table_name)
     log
   end
 
   def log_fetch(log, op_number) do
-    case :dets.lookup(log.table_name, op_number) do
+    case :dets.lookup(log, op_number) do
       [{^op_number, entry}] -> {:ok, entry}
       [] -> {:error, :not_found}
     end
   end
 
   def log_get_all(log) do
-    case :dets.traverse(log.table_name, fn {_op_number, entry} ->
+    case :dets.traverse(log, fn {_op_number, entry} ->
            {:continue, entry}
          end) do
       [] ->
@@ -355,7 +409,7 @@ defmodule MaelstromKv do
   end
 
   def log_get_from(log, op_number) do
-    case :dets.traverse(log.table_name, fn {_op_num, entry} ->
+    case :dets.traverse(log, fn {_op_num, entry} ->
            {:continue, entry}
          end) do
       [] ->
@@ -372,14 +426,14 @@ defmodule MaelstromKv do
   end
 
   def log_length(log) do
-    case :dets.info(log.table_name, :size) do
+    case :dets.info(log, :size) do
       size when is_integer(size) -> size
       _ -> 0
     end
   end
 
   def log_replace(log, entries) do
-    table_name = log.table_name
+    table_name = log
     :ok = :dets.delete_all_objects(table_name)
 
     Logger.debug("Replacing log entries: #{inspect(entries)}")
@@ -393,8 +447,8 @@ defmodule MaelstromKv do
   end
 
   def log_clear(log) do
-    :ok = :dets.delete_all_objects(log.table_name)
-    :ok = :dets.sync(log.table_name)
+    :ok = :dets.delete_all_objects(log)
+    :ok = :dets.sync(log)
     log
   end
 

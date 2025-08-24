@@ -182,9 +182,13 @@ defmodule VsrServer do
   The `VsrServer` init callback adds an additional `log` term in the success tuple,
   which initializes the VSR log,  This should be a durable, local store for logging
   VSR operations.
+
+  If the log must be initialized at a later stage (for example, via an out-of band
+  initialization, then you may return the normal {:ok, state} term)
   """
   @callback init(init_arg :: term) ::
-              {:ok, log, state}
+              {:ok, state}
+              | {:ok, log, state}
               | {:ok, log, state, timeout | :hibernate | {:continue, continue_arg :: term}}
               | :ignore
               | {:stop, reason :: term}
@@ -372,7 +376,6 @@ defmodule VsrServer do
   @callback send_reply(from :: term, reply :: term, inner_state :: term) :: term
 
   @enforce_keys [:module]
-
   defstruct @enforce_keys ++
               [
                 :inner,
@@ -458,6 +461,11 @@ defmodule VsrServer do
 
   defp do_inner_init({state, opts}) do
     case state.module.init(opts) do
+      {:ok, inner_state} ->
+        # this is the case where setting the log should be deferred till later.
+        # note, we don't start timers until a log exists.
+        {:ok, %{state | inner: inner_state}}
+
       {:ok, log, inner_state} ->
         %{state | inner: inner_state, log: log}
         |> start_timers
@@ -483,6 +491,7 @@ defmodule VsrServer do
           cluster_size :: non_neg_integer() | nil
         ) :: :ok
         when node_id: term
+  @spec set_log(server, log :: term()) :: :ok
   @spec vsr_send(server, message :: term()) :: term
   @spec dump(server) :: state()
 
@@ -497,6 +506,14 @@ defmodule VsrServer do
 
   defp set_cluster_impl(node_id, replicas, cluster_size, state),
     do: {:noreply, do_set_cluster(state, node_id, replicas, cluster_size)}
+
+  @doc """
+  In the case that the log cannot be known at boot time (for example, some parameter in the log setup depends
+  on the cluster configuration), this function may be used to set the log.
+  """
+  def set_log(server, log), do: GenServer.cast(server, {:"$vsr_set_log", log})
+
+  def set_log_impl(log, state), do: {:noreply, start_timers(%{state | log: log})}
 
   defp do_set_cluster(state, node_id, replicas, cluster_size) do
     # Create MapSet from replicas, excluding the current node_id
@@ -576,7 +593,7 @@ defmodule VsrServer do
       %{client_id: cid, request_id: rid} -> {cid, rid}
       _ -> {nil, nil}
     end
-    
+
     if primary?(state) do
       # If we are primary, wrap into ClientRequest and tail-call the struct version
       client_request = %ClientRequest{operation: operation, from: from, client_id: client_id, request_id: request_id}
@@ -892,7 +909,7 @@ defmodule VsrServer do
   defp do_view_change_impl(%DoViewChange{} = do_view_change, state) do
     # Check if this node is the primary for the view in the DoViewChange message
     is_primary_for_view = state.node_id == primary_for_view(do_view_change.view, state)
-    
+
     if is_primary_for_view and do_view_change.view == state.view_number and
          state.status == :view_change do
       # Collect DO-VIEW-CHANGE messages - we need majority before proceeding
@@ -1034,7 +1051,7 @@ defmodule VsrServer do
     if view_change_ok.view == state.view_number and primary?(state) do
       # Log the acknowledgment for monitoring purposes
       Logger.debug("ViewChangeOk received from #{view_change_ok.from} for view #{view_change_ok.view}")
-      
+
       # In a full implementation, we could track acknowledgments and take action
       # when all replicas have acknowledged the view change
       # For now, we just acknowledge receipt of the message
@@ -1095,6 +1112,10 @@ defmodule VsrServer do
 
   defp primary?(state) do
     state.node_id == primary(state)
+  end
+
+  defp primary(%{status: :uninitialized}) do
+    nil
   end
 
   defp primary(state) do
@@ -1219,6 +1240,10 @@ defmodule VsrServer do
     }
 
     send_to(state, leader_node, prepare_ok)
+  end
+
+  defp broadcast(%{status: :uninitialized}, _message) do
+    # No-op when uninitialized
   end
 
   defp broadcast(state, message) do
@@ -1373,11 +1398,21 @@ defmodule VsrServer do
   end
 
   @impl true
-  def handle_cast({:"$vsr_set_cluster", node_id, replicas, cluster_size}, state) do
+  def handle_cast({:"$vsr_set_cluster", node_id, replicas, cluster_size}, state), do:
     set_cluster_impl(node_id, replicas, cluster_size, state)
+
+  def handle_cast({:"$vsr_set_log", log}, state), do: set_log_impl(log, state)
+
+  def handle_cast(other, state) do
+    other
+    |> state.module.handle_cast(state.inner)
+    |> wrap_noreply(state)
   end
 
   @impl true
+  def handle_info({:"$vsr", _}, %{status: :uninitialized}), do:
+    raise "vsr message received while uninitialized"
+
   def handle_info({:"$vsr", vsr_message}, state) do
     case vsr_message do
       %ClientRequest{} -> client_request_impl(vsr_message, state)

@@ -6,7 +6,7 @@ defmodule Maelstrom.Stdio do
 
   def start_link(_), do: Task.start_link(__MODULE__, :loop, [])
 
-  @new_state elem(:json.decode_start("", :ok, %{}), 1)
+  @new_state elem(:json.decode_start("", :ok, %{null: nil}), 1)
 
   def loop do
     Logger.info("Starting stdio handler...")
