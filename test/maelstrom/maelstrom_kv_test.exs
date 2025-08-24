@@ -67,7 +67,7 @@ defmodule MaelstromKvTest do
       # First write the value through consensus
       write_result = MaelstromKv.write(server, "key1", "value1", "test_client", 1)
       assert write_result == :ok
-      
+
       # Wait for consensus to complete
       :timer.sleep(50)
 

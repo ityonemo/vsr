@@ -10,7 +10,8 @@ defmodule Vsr.MixProject do
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
       aliases: [
-        tidewave: "run --no-halt -e 'Logger.configure(level: :debug); Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'"
+        tidewave:
+          "run --no-halt -e 'Logger.configure(level: :debug); Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'"
       ]
     ]
   end
@@ -42,7 +43,7 @@ defmodule Vsr.MixProject do
       {:mox, "~> 1.0", only: :test},
       # MCP TOOLS
       {:tidewave, "~> 0.4", only: :dev},
-      {:bandit, "~> 1.0", only: :dev},
+      {:bandit, "~> 1.0", only: :dev}
     ]
   end
 end

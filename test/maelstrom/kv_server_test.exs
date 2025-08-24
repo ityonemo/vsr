@@ -15,7 +15,7 @@ defmodule Maelstrom.KvServerTest do
     unique_id = System.unique_integer([:positive])
     node_id = "n1"
     dets_file = Path.join(temp_dir, "kv_test_#{unique_id}_log.dets")
-    
+
     pid =
       start_supervised!({MaelstromKv, name: :"#{t.test}-node", dets_root: temp_dir})
 

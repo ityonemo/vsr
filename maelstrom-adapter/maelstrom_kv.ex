@@ -25,7 +25,7 @@ defmodule MaelstromKv do
     :from_table,
     dets_root: ".",
     data: %{},
-    msg_id_counter: 0,
+    msg_id_counter: 0
   ]
 
   @type state :: %__MODULE__{
@@ -342,16 +342,19 @@ defmodule MaelstromKv do
                     _ ->
                       send_error_reply_direct(message, 13, "temporarily unavailable")
                   end
-                  
+
                   # Clean up ETS entries
                   delete_from(inner_state, from_hash)
                   :ets.delete(inner_state.from_table, "message_#{from_hash}")
-                  
+
                   # Send GenServer reply to unblock the call
                   GenServer.reply(from_tuple, reply)
 
                 [] ->
-                  Logger.error("Local reply: message for from_hash #{from_hash} not found in ETS table")
+                  Logger.error(
+                    "Local reply: message for from_hash #{from_hash} not found in ETS table"
+                  )
+
                   delete_from(inner_state, from_hash)
                   GenServer.reply(from_tuple, {:error, :no_message_found})
               end

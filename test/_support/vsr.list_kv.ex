@@ -168,7 +168,8 @@ defmodule Vsr.ListKv do
   def send_reply(client_info, reply, _vsr_state) when is_map(client_info) do
     # For client deduplication, extract reply_to from client_info
     case Map.get(client_info, :reply_to) do
-      nil -> :ok  # No reply needed
+      # No reply needed
+      nil -> :ok
       reply_to -> GenServer.reply(reply_to, reply)
     end
   end

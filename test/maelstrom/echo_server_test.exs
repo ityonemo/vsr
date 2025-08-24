@@ -10,10 +10,13 @@ defmodule Maelstrom.EchoServerTest do
     unique_id = System.unique_integer([:positive])
     node_id = "n1"
     dets_file = Path.join(temp_dir, "echo_test_#{unique_id}_log.dets")
-    
+
     # MaelstromKv must be started through VsrServer since it uses VsrServer
     pid =
-      start_supervised!({MaelstromKv, name: :"#{t.test}-node", node_id: node_id, dets_file: dets_file, replicas: []})
+      start_supervised!(
+        {MaelstromKv,
+         name: :"#{t.test}-node", node_id: node_id, dets_file: dets_file, replicas: []}
+      )
 
     # Clean up DETS file on test completion
     on_exit(fn ->
