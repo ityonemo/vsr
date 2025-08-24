@@ -289,14 +289,17 @@ defmodule Maelstrom.Message.MessageTest do
 
     test "converts VSR prepare message correctly" do
       # Generate JSON by encoding a proper struct
-      prepare_message = Message.new("n0", "n1", %Vsr.Message.Prepare{
-        view: 1,
-        op_number: 5,
-        operation: ["write", "key", "value"],
-        commit_number: 4,
-        from: "client_ref",
-        leader_id: "n0"  # Required field
-      })
+      prepare_message =
+        Message.new("n0", "n1", %Vsr.Message.Prepare{
+          view: 1,
+          op_number: 5,
+          operation: ["write", "key", "value"],
+          commit_number: 4,
+          from: "client_ref",
+          # Required field
+          leader_id: "n0"
+        })
+
       json_map = JSON.encode!(prepare_message) |> JSON.decode!()
 
       result = Message.from_json_map(json_map)
@@ -365,14 +368,18 @@ defmodule Maelstrom.Message.MessageTest do
 
     test "converts VSR client_request message correctly" do
       # Generate JSON by encoding a proper struct
-      client_request_message = Message.new("c0", "n0", %Vsr.Message.ClientRequest{
-        operation: ["read", "key"],
-        from: "client_ref",
-        read_only: true,
-        client_key: "unique_key",
-        client_id: "test_client",  # Required field
-        request_id: 42            # Required field
-      })
+      client_request_message =
+        Message.new("c0", "n0", %Vsr.Message.ClientRequest{
+          operation: ["read", "key"],
+          from: "client_ref",
+          read_only: true,
+          client_key: "unique_key",
+          # Required field
+          client_id: "test_client",
+          # Required field
+          request_id: 42
+        })
+
       json_map = JSON.encode!(client_request_message) |> JSON.decode!()
 
       result = Message.from_json_map(json_map)
@@ -393,10 +400,14 @@ defmodule Maelstrom.Message.MessageTest do
 
     test "converts VSR heartbeat message correctly" do
       # Generate JSON by encoding a proper struct
-      heartbeat_message = Message.new("n0", "n1", %Vsr.Message.Heartbeat{
-        view: 1,        # Required field
-        leader_id: "n0"  # Required field
-      })
+      heartbeat_message =
+        Message.new("n0", "n1", %Vsr.Message.Heartbeat{
+          # Required field
+          view: 1,
+          # Required field
+          leader_id: "n0"
+        })
+
       json_map = JSON.encode!(heartbeat_message) |> JSON.decode!()
 
       result = Message.from_json_map(json_map)
@@ -413,14 +424,17 @@ defmodule Maelstrom.Message.MessageTest do
 
     test "handles complex nested data structures" do
       # Generate JSON by encoding a proper struct
-      complex_prepare_message = Message.new("n0", "n1", %Vsr.Message.Prepare{
-        view: 1,
-        op_number: 5,
-        operation: %{"type" => "write", "key" => "foo", "value" => %{"nested" => true}},
-        commit_number: 4,
-        from: %{"client" => "test", "ref" => "abc123"},
-        leader_id: "n0"  # Required field
-      })
+      complex_prepare_message =
+        Message.new("n0", "n1", %Vsr.Message.Prepare{
+          view: 1,
+          op_number: 5,
+          operation: %{"type" => "write", "key" => "foo", "value" => %{"nested" => true}},
+          commit_number: 4,
+          from: %{"client" => "test", "ref" => "abc123"},
+          # Required field
+          leader_id: "n0"
+        })
+
       json_map = JSON.encode!(complex_prepare_message) |> JSON.decode!()
 
       result = Message.from_json_map(json_map)
@@ -582,15 +596,17 @@ defmodule Maelstrom.Message.MessageTest do
     test "VSR prepare message round-trip" do
       # Generate JSON by encoding a proper struct  
       from_hash = 123_456_789
-      
-      original_message = Message.new("n0", "n1", %Vsr.Message.Prepare{
-        view: 1,
-        op_number: 5,
-        operation: ["write", "key", "value"],
-        commit_number: 4,
-        from: from_hash,
-        leader_id: "n0"  # Required field
-      })
+
+      original_message =
+        Message.new("n0", "n1", %Vsr.Message.Prepare{
+          view: 1,
+          op_number: 5,
+          operation: ["write", "key", "value"],
+          commit_number: 4,
+          from: from_hash,
+          # Required field
+          leader_id: "n0"
+        })
 
       # Test round-trip: struct -> JSON -> struct
       encoded = JSON.encode!(original_message)
