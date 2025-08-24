@@ -408,7 +408,6 @@ defmodule VsrServer do
   @typep client_entry :: client_processing | client_cached
 
   defguardp client_entry_request_id(entry) when elem(entry, 1)
-
   @opaque state :: %__MODULE__{
             module: atom(),
             inner: term(),
@@ -420,9 +419,7 @@ defmodule VsrServer do
             view_number: non_neg_integer(),
             op_number: non_neg_integer(),
             commit_number: non_neg_integer(),
-            prepare_ok_count: %{
-              optional({non_neg_integer(), non_neg_integer()}) => non_neg_integer()
-            },
+            prepare_ok_count: %{optional({non_neg_integer(), non_neg_integer()}) => non_neg_integer()},
             view_change_votes: map(),
             last_normal_view: non_neg_integer(),
             heartbeat_timer_ref: reference() | nil,
@@ -600,51 +597,28 @@ defmodule VsrServer do
     # perform wrapping into the ClientRequest struct (and sending or tail-calling) here.
 
     # Extract client deduplication info from from parameter if it's a map
-    {client_id, request_id} =
-      case from do
-        %{client_id: cid, request_id: rid} -> {cid, rid}
-        _ -> {nil, nil}
-      end
+    {client_id, request_id} = case from do
+      %{client_id: cid, request_id: rid} -> {cid, rid}
+      _ -> {nil, nil}
+    end
 
     if primary?(state) do
       # If we are primary, wrap into ClientRequest and tail-call the struct version
-      client_request = %ClientRequest{
-        operation: operation,
-        from: from,
-        client_id: client_id,
-        request_id: request_id
-      }
-
+      client_request = %ClientRequest{operation: operation, from: from, client_id: client_id, request_id: request_id}
       client_request_impl(client_request, state)
     else
       # If we are not primary, wrap and send to primary node
       primary_node = primary(state)
-
-      client_request = %ClientRequest{
-        operation: operation,
-        from: from,
-        client_id: client_id,
-        request_id: request_id
-      }
-
+      client_request = %ClientRequest{operation: operation, from: from, client_id: client_id, request_id: request_id}
       send_to(state, primary_node, client_request)
       {:noreply, state}
     end
   end
 
-  defp client_request_impl(
-         %ClientRequest{
-           operation: operation,
-           from: from,
-           client_id: client_id,
-           request_id: request_id
-         },
-         state
-       ) do
+  defp client_request_impl(%ClientRequest{operation: operation, from: from, client_id: client_id, request_id: request_id}, state) do
     # refactor:  If we are recieving a struct, we know we are the primary.  Put an assertion
     # to that fact here.
     true = primary?(state)
-
     cond do
       state.status != :normal ->
         maybe_send_reply({:error, :not_primary}, from, state)
@@ -669,8 +643,7 @@ defmodule VsrServer do
             maybe_send_reply(cached_result, from, state)
             {:noreply, state}
 
-          {:ok, {:cached, cached_request_id, cached_result}}
-          when request_id < cached_request_id ->
+          {:ok, {:cached, cached_request_id, cached_result}} when request_id < cached_request_id ->
             # Older request - reject with cached result
             maybe_send_reply(cached_result, from, state)
             {:noreply, state}
@@ -710,17 +683,13 @@ defmodule VsrServer do
     broadcast(new_state, prepare_msg)
 
     # Store client info for deduplication if provided
-    updated_state =
-      if client_id && request_id do
-        # We'll cache the result when the operation commits
-        # For now, just store that we're processing this request
-        %{
-          new_state
-          | client_table: Map.put(new_state.client_table, client_id, {:processing, request_id})
-        }
-      else
-        new_state
-      end
+    updated_state = if client_id && request_id do
+      # We'll cache the result when the operation commits
+      # For now, just store that we're processing this request
+      %{new_state | client_table: Map.put(new_state.client_table, client_id, {:processing, request_id})}
+    else
+      new_state
+    end
 
     # Check for immediate commit (single node case)
     final_state = maybe_commit_operation(updated_state, updated_state.op_number)
@@ -741,7 +710,9 @@ defmodule VsrServer do
 
       prepare.view > state.view_number ->
         # Higher view received - adopt the new view and set status to normal
-        Logger.info("Adopting higher view #{prepare.view}, previous view #{state.view_number}")
+        Logger.info(
+          "Adopting higher view #{prepare.view}, previous view #{state.view_number}"
+        )
 
         # Clear old ACK counts when adopting higher view
         cleared_prepare_ok_count = clear_old_view_acks(state.prepare_ok_count, prepare.view)
@@ -867,9 +838,8 @@ defmodule VsrServer do
     else
       Logger.debug(
         "Ignoring heartbeat from view #{heartbeat.view} leader #{heartbeat.leader_id}, " <>
-          "current view #{state.view_number} leader #{primary(state)}"
+        "current view #{state.view_number} leader #{primary(state)}"
       )
-
       {:noreply, state}
     end
   end
@@ -878,8 +848,7 @@ defmodule VsrServer do
   defp start_view_change_impl(%StartViewChange{} = start_view_change, state) do
     if start_view_change.view > state.view_number do
       # Transition to view change status and clear old ACK counts
-      cleared_prepare_ok_count =
-        clear_old_view_acks(state.prepare_ok_count, start_view_change.view)
+      cleared_prepare_ok_count = clear_old_view_acks(state.prepare_ok_count, start_view_change.view)
 
       new_state = %{
         state
@@ -991,14 +960,12 @@ defmodule VsrServer do
         # Find the best candidate from all DO-VIEW-CHANGE messages
         best_candidate =
           updated_messages
-          |> Enum.map(fn msg ->
-            %{
-              last_normal_view: msg.last_normal_view,
-              op_number: msg.op_number,
-              commit_number: msg.commit_number,
-              log: msg.log
-            }
-          end)
+          |> Enum.map(fn msg -> %{
+            last_normal_view: msg.last_normal_view,
+            op_number: msg.op_number,
+            commit_number: msg.commit_number,
+            log: msg.log
+          } end)
           |> then(fn candidates -> [primary_candidate | candidates] end)
           |> Enum.max_by(fn candidate ->
             {candidate.last_normal_view, candidate.op_number}
@@ -1012,8 +979,7 @@ defmodule VsrServer do
           |> Enum.max()
 
         # Clear old ACK counts for the new view
-        cleared_prepare_ok_count =
-          clear_old_view_acks(new_state.prepare_ok_count, state.view_number)
+        cleared_prepare_ok_count = clear_old_view_acks(new_state.prepare_ok_count, state.view_number)
 
         merged_state = %{
           new_state
@@ -1098,9 +1064,7 @@ defmodule VsrServer do
     # ViewChangeOk acknowledgment received from a replica
     if view_change_ok.view == state.view_number and primary?(state) do
       # Log the acknowledgment for monitoring purposes
-      Logger.debug(
-        "ViewChangeOk received from #{view_change_ok.from} for view #{view_change_ok.view}"
-      )
+      Logger.debug("ViewChangeOk received from #{view_change_ok.from} for view #{view_change_ok.view}")
 
       # In a full implementation, we could track acknowledgments and take action
       # when all replicas have acknowledged the view change
@@ -1182,8 +1146,7 @@ defmodule VsrServer do
 
   defp has_quorum?(state) do
     # Count currently connected replicas (including self)
-    # +1 for self
-    connected_count = MapSet.size(state.replicas) + 1
+    connected_count = MapSet.size(state.replicas) + 1  # +1 for self
     # Check if connected nodes form a majority of the total cluster
     connected_count > div(state.cluster_size, 2)
   end
@@ -1243,23 +1206,19 @@ defmodule VsrServer do
         end)
 
       # Update client_table with results for deduplication
-      updated_client_table =
-        if primary?(state) do
-          Enum.reduce(operation_results, state.client_table, fn {_op_num, result, sender_id},
-                                                                client_table_acc ->
-            # Extract client_id and request_id from sender_id if it's a map with deduplication info
-            case sender_id do
-              %{client_id: client_id, request_id: request_id}
-              when not is_nil(client_id) and not is_nil(request_id) ->
-                Map.put(client_table_acc, client_id, {:cached, request_id, result})
-
-              _ ->
-                client_table_acc
-            end
-          end)
-        else
-          state.client_table
-        end
+      updated_client_table = if primary?(state) do
+        Enum.reduce(operation_results, state.client_table, fn {_op_num, result, sender_id}, client_table_acc ->
+          # Extract client_id and request_id from sender_id if it's a map with deduplication info
+          case sender_id do
+            %{client_id: client_id, request_id: request_id} when not is_nil(client_id) and not is_nil(request_id) ->
+              Map.put(client_table_acc, client_id, {:cached, request_id, result})
+            _ ->
+              client_table_acc
+          end
+        end)
+      else
+        state.client_table
+      end
 
       # Send client replies for committed operations (only primary does this)
       if primary?(state) do
@@ -1270,12 +1229,7 @@ defmodule VsrServer do
         end)
       end
 
-      %{
-        state
-        | commit_number: new_commit_number,
-          inner: new_inner,
-          client_table: updated_client_table
-      }
+      %{state | commit_number: new_commit_number, inner: new_inner, client_table: updated_client_table}
     else
       state
     end
@@ -1458,8 +1412,8 @@ defmodule VsrServer do
   end
 
   @impl true
-  def handle_cast({:"$vsr_set_cluster", node_id, replicas, cluster_size}, state),
-    do: set_cluster_impl(node_id, replicas, cluster_size, state)
+  def handle_cast({:"$vsr_set_cluster", node_id, replicas, cluster_size}, state), do:
+    set_cluster_impl(node_id, replicas, cluster_size, state)
 
   def handle_cast({:"$vsr_set_log", log}, state), do: set_log_impl(log, state)
 
@@ -1470,8 +1424,8 @@ defmodule VsrServer do
   end
 
   @impl true
-  def handle_info({:"$vsr", _}, %{status: :uninitialized}),
-    do: raise("vsr message received while uninitialized")
+  def handle_info({:"$vsr", _}, %{status: :uninitialized}), do:
+    raise "vsr message received while uninitialized"
 
   def handle_info({:"$vsr", vsr_message}, state) do
     case vsr_message do
@@ -1496,7 +1450,6 @@ defmodule VsrServer do
         view: state.view_number,
         leader_id: state.node_id
       }
-
       broadcast(state, heartbeat_msg)
       new_state = start_heartbeat_timer(state)
       {:noreply, new_state}
