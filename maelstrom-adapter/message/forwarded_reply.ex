@@ -9,16 +9,16 @@ defmodule Maelstrom.Message.ForwardedReply do
   @type t :: %__MODULE__{
           type: :forwarded_reply,
           from_hash: non_neg_integer(),
-          result: term()
+          reply: term()
         }
 
-  defstruct [:from_hash, :result, type: :forwarded_reply]
+  defstruct [:from_hash, :reply, type: :forwarded_reply]
 
   @doc """
-  Decode the base64 encoded result back to an Erlang term.
+  Decode the base64 encoded reply back to an Erlang term.
   """
-  def decode_result(%__MODULE__{result: result}) do
-    result
+  def decode_reply(%__MODULE__{reply: reply}) do
+    reply
     |> Base.decode64!()
     |> :erlang.binary_to_term()
   end
@@ -27,7 +27,7 @@ defmodule Maelstrom.Message.ForwardedReply do
     def encode(reply, opts) do
       reply
       |> Map.from_struct()
-      |> Map.update!(:result, &term_encode/1)
+      |> Map.update!(:reply, &term_encode/1)
       |> JSON.Encoder.encode(opts)
     end
 

@@ -161,9 +161,11 @@ defmodule MaelstromKv do
     {:noreply, state, request_with(["cas", key, cas_from, to], from, state)}
   end
 
-  defp do_forwarded_reply(%{from_hash: from_hash, reply: reply}, reply, state) do
+  defp do_forwarded_reply(%ForwardedReply{from_hash: from_hash} = forwarded_reply, _from, state) do
+    # Decode the base64 encoded reply back to Erlang term
+    decoded_reply = ForwardedReply.decode_reply(forwarded_reply)
     # Get the from_tuple from our ETS table and reply
-    local_reply(state, from_hash, reply)
+    local_reply(state, from_hash, decoded_reply)
     {:reply, :ok, state}
   end
 
@@ -203,7 +205,7 @@ defmodule MaelstromKv do
       local_reply(state, from_hash, reply)
     else
       VsrServer.node_id()
-      |> Message.new(node_id, %ForwardedReply{from_hash: from_hash, result: reply})
+      |> Message.new(node_id, %ForwardedReply{from_hash: from_hash, reply: reply})
       |> JSON.encode!()
       |> IO.puts()
     end

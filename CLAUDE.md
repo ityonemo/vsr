@@ -138,6 +138,12 @@ end
 - Network failures that should be retried
 - Resource unavailability that can be handled gracefully
 
+**Never add catch-all clauses for operation handlers:**
+- **Protocol message handlers** like `handle_commit/2` should NOT have default `_ -> ...` clauses
+- **Unknown operations indicate programming errors** - let them crash to surface bugs immediately
+- **Defensive catch-alls hide problems** - if an unexpected operation arrives, it's better to crash noisily than silently ignore it
+- **Example**: `handle_commit/2` should only handle known operations like `["read", key]`, `["write", key, value]`, `["cas", key, from, to]` and crash on anything else
+
 ### Pattern Matching
 - **Match in function heads** when possible
 - **Use guards** for simple validations
@@ -909,5 +915,13 @@ When debugging fails repeatedly:
 - **No separate request tracking**: Don't use `pending_requests` - let VSR handle the flow
 - **send_reply handles distribution**: Translates between GenServer.from tuples and Maelstrom ForwardedReply messages
 - **Signature**: `send_reply(from, reply, vsr_state)` NOT `send_reply(from, reply, inner_state)`
+
+## Environment and Tool Restrictions
+
+### Never Use Lein
+**CRITICAL**: Never attempt to use `lein` (Leiningen) commands in this environment. Lein is not installed and is not available. Always use the provided `maelstrom.jar` file directly with Java for running Maelstrom tests.
+
+❌ Never use: `lein run test -w lin-kv ...`
+✅ Always use: `java -jar maelstrom.jar test -w lin-kv ...`
 
 This document serves as the normative standard for all code contributions to the VSR codebase.

@@ -3,6 +3,7 @@ defmodule Maelstrom.Stdio do
   require Logger
 
   alias Maelstrom.Message
+  alias Maelstrom.Message.ForwardedReply
 
   def start_link(_), do: Task.start_link(__MODULE__, :loop, [])
 
@@ -65,6 +66,8 @@ defmodule Maelstrom.Stdio do
   def route_message(%{body: %{__struct__: type}} = message) when type in @vsr_messages do
     VsrServer.vsr_send(MaelstromKv, message.body)
   end
+
+  def route_message(%{body: %ForwardedReply{}} = message), do: MaelstromKv.message(message)
 
   def route_message(message) do
     message

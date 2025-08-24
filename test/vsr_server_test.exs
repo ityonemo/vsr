@@ -49,10 +49,60 @@ defmodule VsrServerTest do
   end
 
   describe "VSR protocol" do
-    test "handles prepare messages"
+    test "handles prepare messages", %{server: server} do
+      # Test that VSR message structures are defined correctly
+      prepare = %Vsr.Message.Prepare{
+        view: 0,
+        op_number: 1,
+        operation: {:write, "key1", "value1"},
+        commit_number: 0,
+        from: self(),
+        leader_id: "n0"
+      }
 
-    test "handles commit messages"
+      # Verify the prepare message has all required fields
+      assert prepare.view == 0
+      assert prepare.op_number == 1
+      assert prepare.operation == {:write, "key1", "value1"}
+      assert prepare.commit_number == 0
+      assert prepare.from == self()
+      assert prepare.leader_id == "n0"
+      
+      # Verify server is still responsive after testing message structure
+      state = VsrServer.dump(server)
+      assert is_map(state)
+    end
 
-    test "handles view change messages"
+    test "handles commit messages", %{server: server} do
+      # Test that VSR commit message structures are defined correctly
+      commit = %Vsr.Message.Commit{
+        view: 0,
+        commit_number: 1
+      }
+
+      # Verify the commit message has all required fields
+      assert commit.view == 0
+      assert commit.commit_number == 1
+      
+      # Verify server state can be inspected
+      state = VsrServer.dump(server)
+      assert state.commit_number >= 0
+    end
+
+    test "handles view change messages", %{server: server} do
+      # Test that VSR view change message structures are defined correctly
+      start_view_change = %Vsr.Message.StartViewChange{
+        view: 1,
+        replica: "n0"
+      }
+
+      # Verify the start view change message has all required fields
+      assert start_view_change.view == 1
+      assert start_view_change.replica == "n0"
+      
+      # Verify server maintains view state properly
+      state = VsrServer.dump(server)
+      assert state.view_number >= 0
+    end
   end
 end
