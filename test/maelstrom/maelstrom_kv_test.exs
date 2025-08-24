@@ -84,7 +84,7 @@ defmodule MaelstromKvTest do
 
       # Apply the operation through handle_commit
       kv_state = %MaelstromKv{}
-      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state, nil)
+      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state)
 
       assert result == :ok
       assert new_kv_state.data["key1"] == "value1"
@@ -97,7 +97,7 @@ defmodule MaelstromKvTest do
       kv_state = %MaelstromKv{data: %{"key1" => "old_value"}}
       operation = ["cas", "key1", "old_value", "new_value"]
 
-      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state, nil)
+      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state)
 
       assert result == :ok
       assert new_kv_state.data["key1"] == "new_value"
@@ -108,7 +108,7 @@ defmodule MaelstromKvTest do
       kv_state = %MaelstromKv{data: %{"key1" => "actual_value"}}
       operation = ["cas", "key1", "expected_value", "new_value"]
 
-      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state, nil)
+      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state)
 
       assert result == {:error, :precondition_failed}
       # Unchanged
@@ -120,7 +120,7 @@ defmodule MaelstromKvTest do
       kv_state = %MaelstromKv{}
       operation = ["cas", "new_key", nil, "value1"]
 
-      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state, nil)
+      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state)
 
       assert result == :ok
       assert new_kv_state.data["new_key"] == "value1"
@@ -150,7 +150,7 @@ defmodule MaelstromKvTest do
       kv_state = %MaelstromKv{}
       operation = ["unknown_operation", "param"]
 
-      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state, nil)
+      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state)
 
       assert result == :ok
       # Unchanged
