@@ -18,7 +18,6 @@ defmodule VsrServer do
   alias Vsr.Message.StartViewChangeAck
   alias Vsr.Message.DoViewChange
   alias Vsr.Message.StartView
-  alias Vsr.Message.ViewChangeOk
   alias Vsr.Message.GetState
   alias Vsr.Message.NewState
   alias Vsr.Message.Heartbeat
@@ -641,16 +640,27 @@ defmodule VsrServer do
          },
          state
        ) do
-    # refactor:  If we are recieving a struct, we know we are the primary.  Put an assertion
-    # to that fact here.
-    true = primary?(state)
+    # During network partitions or view changes, a ClientRequest may be forwarded to a node
+    # that was primary when the message was sent but is no longer primary when received.
+    # Handle this gracefully by checking current primary status and forwarding if needed.
+    if not primary?(state) do
+      primary_node = primary(state)
+      client_request = %ClientRequest{
+        operation: operation,
+        from: from,
+        client_id: client_id,
+        request_id: request_id
+      }
+      send_to(state, primary_node, client_request)
+      {:noreply, state}
+    else
 
     cond do
       state.status != :normal ->
         maybe_send_reply({:error, :not_primary}, from, state)
         {:noreply, state}
 
-      not has_quorum?(state) ->
+      not quorum?(state) ->
         maybe_send_reply({:error, :no_quorum}, from, state)
         {:noreply, state}
 
@@ -669,20 +679,21 @@ defmodule VsrServer do
             maybe_send_reply(cached_result, from, state)
             {:noreply, state}
 
-          {:ok, {:cached, cached_request_id, cached_result}}
+          {:ok, {:cached, cached_request_id, _cached_result}}
           when request_id < cached_request_id ->
-            # Older request - reject with cached result
-            maybe_send_reply(cached_result, from, state)
+            # Older request - drop without reply (client should have already received response)
             {:noreply, state}
 
           _ ->
-            # if it's still processing, do nothing, something else will reply.
+            # Request is still processing - duplicate request starves waiting for original to complete
+            # TODO: Implement waiter list to support concurrent duplicate requests getting same reply
             {:noreply, state}
         end
 
       :else ->
         # No client deduplication info - process normally (backwards compatibility)
         process_new_client_request(state, operation, from, client_id, request_id)
+    end
     end
   end
 
@@ -750,7 +761,8 @@ defmodule VsrServer do
           state
           | view_number: prepare.view,
             status: :normal,
-            prepare_ok_count: cleared_prepare_ok_count
+            prepare_ok_count: cleared_prepare_ok_count,
+            view_change_votes: %{}
         }
 
         # Now process the prepare with the updated view
@@ -774,25 +786,61 @@ defmodule VsrServer do
         {:noreply, new_state}
 
       prepare.op_number <= log_length ->
-        # Already have this operation
-        send_prepare_ok(state, prepare)
-        {:noreply, state}
+        # Check if existing log entry matches to detect conflicts
+        case state.module.log_fetch(state.log, prepare.op_number) do
+          {:ok, %LogEntry{view: view, operation: operation}} 
+          when view == prepare.view and operation == prepare.operation ->
+            # Exact match - idempotent ACK
+            send_prepare_ok(state, prepare)
+            {:noreply, state}
+
+          _ ->
+            # Conflict detected - but avoid excessive state transfers
+            # Only request state transfer if we're significantly behind
+            if prepare.view > state.view_number or prepare.op_number - log_length > 5 do
+              Logger.warning(
+                "Significant log conflict at op #{prepare.op_number}: requesting state transfer"
+              )
+
+              primary_node = prepare.leader_id || primary(state)
+
+              get_state_msg = %GetState{
+                view: prepare.view,  # Use leader's view, not our stale view
+                op_number: state.op_number,
+                sender: state.node_id
+              }
+
+              send_to(state, primary_node, get_state_msg)
+              {:noreply, state}
+            else
+              # Minor conflict - accept the leader's version and continue
+              Logger.debug(
+                "Minor log conflict at op #{prepare.op_number}: accepting leader's version"
+              )
+
+              entry = %LogEntry{
+                view: prepare.view,
+                op_number: prepare.op_number,
+                operation: prepare.operation,
+                sender_id: prepare.from
+              }
+
+              new_state =
+                state
+                |> replace_log_entry_at(entry, prepare.op_number)
+                |> Map.replace(:op_number, max(state.op_number, prepare.op_number))
+
+              send_prepare_ok(new_state, prepare)
+              {:noreply, new_state}
+            end
+        end
 
       prepare.op_number > log_length + 1 ->
-        # Gap detected - request state transfer
-        Logger.warning(
-          "Gap detected: received op #{prepare.op_number}, expected #{log_length + 1}"
+        # Gap detected - ignore this prepare and let normal commit/catch-up handle it
+        # This prevents excessive state transfers during normal operation
+        Logger.debug(
+          "Gap detected: received op #{prepare.op_number}, expected #{log_length + 1}, ignoring"
         )
-
-        primary_node = primary(state)
-
-        get_state_msg = %GetState{
-          view: state.view_number,
-          op_number: state.op_number,
-          sender: state.node_id
-        }
-
-        send_to(state, primary_node, get_state_msg)
         {:noreply, state}
     end
   end
@@ -819,8 +867,19 @@ defmodule VsrServer do
   end
 
   defp get_state_impl(%GetState{} = get_state, state) do
-    # Send current state to requesting replica
-    log_entries = get_all_log_entries(state)
+    # Optimize state transfer by only sending what the requester actually needs
+    # If they specify a starting op_number, send from there; otherwise send everything
+    log_entries = case Map.get(get_state, :from_op_number) do
+      nil -> 
+        # Legacy behavior - send everything (for compatibility)
+        get_all_log_entries(state)
+      from_op when is_integer(from_op) and from_op > 0 ->
+        # Send only entries from the requested point onwards
+        log_get_from(state, from_op)
+      _ ->
+        # Invalid from_op_number - send everything as fallback
+        get_all_log_entries(state)
+    end
 
     new_state_msg = %NewState{
       view: state.view_number,
@@ -852,6 +911,15 @@ defmodule VsrServer do
 
       # Update inner state
       final_state = set_inner_state(final_state, new_state.state_machine_state)
+
+      # Apply committed operations for consistency (usually no-op since state is already applied)
+      final_state = apply_committed_operations(final_state, final_state.commit_number)
+
+      # Clear per-view counters after state transfer
+      final_state = %{final_state | 
+        prepare_ok_count: clear_old_view_acks(final_state.prepare_ok_count, final_state.view_number),
+        view_change_votes: %{}
+      }
 
       {:noreply, final_state}
     else
@@ -921,13 +989,12 @@ defmodule VsrServer do
       votes = Map.put(state.view_change_votes, ack.view, updated_votes)
       new_state = %{state | view_change_votes: votes}
 
-      # Check if we have enough votes to proceed from connected replicas
+      # Check if we have enough votes to proceed from cluster
       vote_count = length(updated_votes)
-      connected_replicas = MapSet.size(state.replicas) + 1
 
       # Only send DO-VIEW-CHANGE once when we first reach majority
-      if vote_count > div(connected_replicas, 2) and
-           length(existing_votes) <= div(connected_replicas, 2) do
+      if vote_count > div(state.cluster_size, 2) and
+           length(existing_votes) <= div(state.cluster_size, 2) do
         # Just reached enough votes, send DO-VIEW-CHANGE to new primary
         new_primary = primary_for_view(ack.view, state)
 
@@ -1073,17 +1140,7 @@ defmodule VsrServer do
       # Apply any newly committed operations after view change
       final_state = apply_committed_operations(updated_state, start_view.commit_number)
 
-      # Send VIEW-CHANGE-OK to new primary (unless we are the primary)
-      new_primary = primary_for_view(start_view.view, final_state)
-
-      if new_primary != state.node_id do
-        view_change_ok_msg = %ViewChangeOk{
-          view: start_view.view,
-          from: state.node_id
-        }
-
-        send_to(final_state, new_primary, view_change_ok_msg)
-      end
+      # ViewChangeOk message removed - not part of standard VSR protocol
 
       # Reset primary inactivity timer since this node is now a follower
       timer_updated_state = reset_primary_inactivity_timer(final_state)
@@ -1094,23 +1151,6 @@ defmodule VsrServer do
     end
   end
 
-  defp view_change_ok_impl(%ViewChangeOk{} = view_change_ok, state) do
-    # ViewChangeOk acknowledgment received from a replica
-    if view_change_ok.view == state.view_number and primary?(state) do
-      # Log the acknowledgment for monitoring purposes
-      Logger.debug(
-        "ViewChangeOk received from #{view_change_ok.from} for view #{view_change_ok.view}"
-      )
-
-      # In a full implementation, we could track acknowledgments and take action
-      # when all replicas have acknowledged the view change
-      # For now, we just acknowledge receipt of the message
-      {:noreply, state}
-    else
-      # Ignore stale or irrelevant ViewChangeOk messages
-      {:noreply, state}
-    end
-  end
 
   defp start_manual_view_change(state) do
     # Increment view and transition to view change status
@@ -1141,7 +1181,8 @@ defmodule VsrServer do
 
   defp primary_for_view(view_number, state) do
     all_replicas = [state.node_id | MapSet.to_list(state.replicas)]
-    sorted_replicas = Enum.sort(all_replicas)
+    # Use :erlang.term_to_binary for stable, deterministic ordering across all nodes
+    sorted_replicas = Enum.sort_by(all_replicas, &:erlang.term_to_binary/1)
     replica_count = length(sorted_replicas)
 
     if replica_count > 0 do
@@ -1169,18 +1210,10 @@ defmodule VsrServer do
   end
 
   defp primary(state) do
-    all_replicas = [state.node_id | MapSet.to_list(state.replicas)]
-    sorted_replicas = Enum.sort(all_replicas)
-    replica_count = length(sorted_replicas)
-
-    if replica_count > 0 do
-      Enum.at(sorted_replicas, rem(state.view_number, replica_count))
-    else
-      state.node_id
-    end
+    primary_for_view(state.view_number, state)
   end
 
-  defp has_quorum?(state) do
+  defp quorum?(state) do
     # Count currently connected replicas (including self)
     # +1 for self
     connected_count = MapSet.size(state.replicas) + 1
@@ -1203,10 +1236,13 @@ defmodule VsrServer do
     # Use {view, op_number} key for ACK counting
     key = {state.view_number, op_number}
     current_count = Map.get(state.prepare_ok_count, key, 0)
-    connected_replicas = MapSet.size(state.replicas) + 1
 
     # Note: removed quorum?(state) check - it was always true
-    if current_count > div(connected_replicas, 2) do
+    # Use cluster_size for consistent quorum calculation
+    if current_count > div(state.cluster_size, 2) do
+      # Commit advancement: Safe to advance commit_number directly to op_number
+      # since VSR's "append only at log_length + 1" rule ensures same majority
+      # has accepted all operations ≤ op_number due to sequential ordering
       new_commit_number = max(state.commit_number, op_number)
 
       # Apply operations and send replies
@@ -1344,9 +1380,27 @@ defmodule VsrServer do
     |> Enum.sort_by(& &1.op_number)
   end
 
+
   defp replace_log(state, entries) do
     new_log = log_replace(state, entries)
     %{state | log: new_log}
+  end
+
+  defp replace_log_entry_at(state, entry, op_number) do
+    # Replace the entry at a specific position
+    current_entries = get_all_log_entries(state)
+    
+    updated_entries = 
+      current_entries
+      |> Enum.map(fn existing_entry ->
+        if existing_entry.op_number == op_number do
+          entry
+        else
+          existing_entry
+        end
+      end)
+    
+    replace_log(state, updated_entries)
   end
 
   # Inner state management
@@ -1428,6 +1482,7 @@ defmodule VsrServer do
   defp log_append(state, entry), do: state.module.log_append(state.log, entry)
   defp log_length(state), do: state.module.log_length(state.log)
   defp log_get_all(state), do: state.module.log_get_all(state.log)
+  defp log_get_from(state, op_number), do: state.module.log_get_from(state.log, op_number)
   defp log_replace(state, entries), do: state.module.log_replace(state.log, entries)
 
   # ROUTER
@@ -1475,7 +1530,6 @@ defmodule VsrServer do
       %StartViewChangeAck{} -> start_view_change_ack_impl(vsr_message, state)
       %DoViewChange{} -> do_view_change_impl(vsr_message, state)
       %StartView{} -> start_view_impl(vsr_message, state)
-      %ViewChangeOk{} -> view_change_ok_impl(vsr_message, state)
       %GetState{} -> get_state_impl(vsr_message, state)
       %NewState{} -> new_state_impl(vsr_message, state)
       %Heartbeat{} -> heartbeat_impl(vsr_message, state)

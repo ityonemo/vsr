@@ -16,7 +16,6 @@ defmodule ViewChangeTest do
   alias Vsr.Message.StartViewChangeAck
   alias Vsr.Message.DoViewChange
   alias Vsr.Message.StartView
-  alias Vsr.Message.ViewChangeOk
 
   setup do
     unique_id = System.unique_integer([:positive])
@@ -317,27 +316,6 @@ defmodule ViewChangeTest do
     end
   end
 
-  describe "view_change_ok_impl/2" do
-    test "processes ViewChangeOk message", %{
-      replicas: [replica1 | _],
-      node_ids: [_node1_id, node2_id | _]
-    } do
-      # Send ViewChangeOk message
-      view_change_ok_msg = %ViewChangeOk{
-        view: 1,
-        from: node2_id
-      }
-
-      VsrServer.vsr_send(replica1, view_change_ok_msg)
-      Process.sleep(50)
-
-      # Should not crash and should be processed
-      # ViewChangeOk is mainly for confirmation, doesn't change much state
-      state = VsrServer.dump(replica1)
-      # Basic sanity check
-      assert state.view_number >= 0
-    end
-  end
 
   describe "start_manual_view_change/1" do
     test "initiates view change when primary inactivity timeout occurs", %{

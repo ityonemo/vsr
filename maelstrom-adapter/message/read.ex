@@ -45,4 +45,13 @@ defmodule Maelstrom.Message.Read do
       text: "key not found"
     }
   end
+
+  def reply(msg, {:error, :not_primary}) do
+    # Read error for not being primary - should be an Error message
+    %Maelstrom.Message.Error{
+      in_reply_to: msg.msg_id,
+      code: 11,
+      text: "not primary"
+    }
+  end
 end
