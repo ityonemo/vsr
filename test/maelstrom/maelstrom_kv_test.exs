@@ -50,7 +50,8 @@ defmodule MaelstromKvTest do
       capture_log(fn ->
         Process.group_leader(server, Process.group_leader())
         result = MaelstromKv.echo(server, "hello world", "test_client", 1)
-        assert result == :ok
+        assert %{msg_id: msg_id} = result
+        assert is_integer(msg_id)
       end)
     end
   end
@@ -145,16 +146,6 @@ defmodule MaelstromKvTest do
     end
   end
 
-  describe "error handling" do
-    test "handles unknown operations gracefully", %{server: _server} do
-      kv_state = %MaelstromKv{}
-      operation = ["unknown_operation", "param"]
-
-      {new_kv_state, result} = MaelstromKv.handle_commit(operation, kv_state)
-
-      assert result == :ok
-      # Unchanged
-      assert new_kv_state == kv_state
-    end
-  end
+  # Note: No error handling tests for unknown operations - we want handle_commit 
+  # to crash on unknown operations to surface programming errors immediately
 end

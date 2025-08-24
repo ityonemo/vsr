@@ -68,7 +68,7 @@ defmodule Maelstrom.Message do
   obtained from MaelstromKv server.
   """
   def reply(msg, response) do
-    msg.__struct__.reply(msg, response)
+    msg.body.__struct__.reply(msg.body, response)
   end
 end
 

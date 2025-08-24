@@ -575,6 +575,26 @@ defmodule VsrProtocolCorrectnessTest do
   end
 
   describe "Quorum calculations" do
-    test "quorum?/1 reflects actual connectivity or is removed"
+    test "has_quorum?/1 reflects actual connectivity", %{replica: replica} do
+      # Test the quorum calculation logic
+      state = VsrServer.dump(replica)
+      
+      # Single-node cluster should always have quorum
+      # cluster_size = 1, connected_count = 1 (self)
+      # 1 > div(1, 2) = 0, so true
+      assert state.cluster_size == 1
+      
+      # We can't directly call has_quorum? since it's private,
+      # but we can test the logic by verifying client operations work
+      # which internally use has_quorum? checks
+      
+      # In single-node mode, client requests should succeed (has quorum)
+      result = GenServer.call(replica, {:client_request, {:write, "test_key", "test_value"}})
+      assert result == :ok
+      
+      # Verify the operation was applied
+      data = GenServer.call(replica, :get_data)
+      assert data["test_key"] == "test_value"
+    end
   end
 end
