@@ -402,13 +402,13 @@ The Router pattern (as exemplified in VsrServer) separates message routing from 
 
 ```elixir
 # ROUTER - Only routes messages to handlers, no processing
-def handle_call({:message, message}, _from, state) do
+def handle_call({:message, message}, from, state) do
   case message.body do
     %Init{} = init ->
-      do_init(init, message, state)
+      do_init(init, from, state)
       
     %Echo{} = echo ->
-      do_echo(echo, message, state)
+      do_echo(echo, from, state)
       
     # No defensive _ -> branch - let it crash on unexpected input
   end

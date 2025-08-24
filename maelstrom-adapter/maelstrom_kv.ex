@@ -118,7 +118,7 @@ defmodule MaelstromKv do
 
   # Maelstrom message handlers (integrated from Maelstrom.Node)
 
-  defp do_init(%{node_id: node_id, node_ids: node_ids} = init, message, state) do
+  defp do_init(%{node_id: node_id, node_ids: node_ids}, _from, state) do
     Logger.info("Initializing Maelstrom node #{node_id} with cluster: #{inspect(node_ids)}")
 
     # Initialize VSR cluster with the provided node list
@@ -133,250 +133,79 @@ defmodule MaelstromKv do
     {:ok, log} = :dets.open_file(table_name, file: String.to_charlist(dets_file))
     VsrServer.set_log(self(), log)
 
-    # Send init response
-    reply_body = Message.reply(init, :ok)
-    response_message = Message.new(message.dest, message.src, reply_body)
-
-    JSON.encode!(response_message)
-    |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-    |> IO.puts()
-
     # Return state unchanged - node info handled at protocol level
     {:reply, :ok, state}
   end
 
-  defp do_echo(%Echo{msg_id: msg_id} = echo, message, state) do
-    Logger.debug("Echoing message #{msg_id} with content: #{inspect(echo)}")
+  defp do_echo(%{msg_id: msg_id} = echo, _from, state) do
+    Logger.debug("Echoing message #{msg_id} with content: #{echo}")
     new_msg_id = state.msg_id_counter + 1
-
-    reply_body = Message.reply(echo, %{echo: echo.echo, msg_id: new_msg_id})
-    response_message = Message.new(message.dest, message.src, reply_body)
-
-    JSON.encode!(response_message)
-    |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-    |> IO.puts()
-
-    {:reply, :ok, %{state | msg_id_counter: new_msg_id}}
+    {:reply, %{msg_id: new_msg_id}, %{state | msg_id_counter: new_msg_id}}
   end
 
-  defp do_read(%Read{key: key}, message, from, state) do
-    # Read operations require consensus for linearizability
-    operation = ["read", key]
-
-    # Store GenServer from in ETS and create encoded from for VSR
-    from_hash = store_from(state, from)
+  defp request_with(value, from, state) do
+    from_hash = push_from(state, from)
     encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
-
-    # Store message for Maelstrom JSON reply later
-    :ets.insert(state.from_table, {"message_#{from_hash}", message})
-
-    {:noreply, state, {:client_request, encoded_from, operation}}
+    {:client_request, encoded_from, value}
   end
 
-  defp do_write(%Write{key: key, value: value}, message, from, state) do
-    # Write operations require consensus
-    operation = ["write", key, value]
-
-    # Store GenServer from in ETS and create encoded from for VSR
-    from_hash = store_from(state, from)
-    encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
-
-    # Store message for Maelstrom JSON reply later
-    :ets.insert(state.from_table, {"message_#{from_hash}", message})
-
-    {:noreply, state, {:client_request, encoded_from, operation}}
+  defp do_read(%{key: key}, from, state) do
+    {:noreply, state, request_with(["read", key], from, state)}
   end
 
-  defp do_cas(%Cas{key: key, from: cas_from, to: to}, message, genserver_from, state) do
-    # CAS operations require consensus
-    operation = ["cas", key, cas_from, to]
-
-    # Store GenServer from in ETS and create encoded from for VSR
-    from_hash = store_from(state, genserver_from)
-    encoded_from = %{"node" => VsrServer.node_id(), "from" => from_hash}
-
-    # Store message for Maelstrom JSON reply later
-    :ets.insert(state.from_table, {"message_#{from_hash}", message})
-
-    {:noreply, state, {:client_request, encoded_from, operation}}
+  defp do_write(%{key: key, value: value}, from, state) do
+    {:noreply, state, request_with(["write", key, value], from, state)}
   end
 
-  defp do_forwarded_reply(
-         %ForwardedReply{from_hash: from_hash} = forwarded_reply,
-         _message,
-         state
-       ) do
+  defp do_cas(%{key: key, from: cas_from, to: to}, from, state) do
+    {:noreply, state, request_with(["cas", key, cas_from, to], from, state)}
+  end
+
+  defp do_forwarded_reply(%{from_hash: from_hash, reply: reply}, reply, state) do
     # Get the from_tuple from our ETS table and reply
-    case fetch_from(state, from_hash) do
-      {:ok, from_tuple} ->
-        delete_from(state, from_hash)
-        GenServer.reply(from_tuple, ForwardedReply.decode_result(forwarded_reply))
-
-      {:error, :not_found} ->
-        Logger.error("ForwardedReply: from_hash #{from_hash} not found in ETS table")
-    end
-
+    local_reply(state, from_hash, reply)
     {:reply, :ok, state}
   end
 
-  defp send_error_reply_direct(message, code, text) do
-    message.dest
-    |> Message.new(message.src, %Maelstrom.Message.Error{
-      in_reply_to: message.body.msg_id,
-      code: code,
-      text: text
-    })
-    |> JSON.encode!()
-    |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-    |> IO.puts()
+  defp read_impl(key, state) do
+    value = Map.get(state.data, key)
+    result = if value, do: {:ok, value}, else: {:error, :not_found}
+    {state, result}
   end
 
-  # VSR commit handler for Maelstrom operations
-  def handle_commit(operation, state) do
-    case operation do
-      ["read", key] ->
-        # Read operations through VSR consensus
-        value = Map.get(state.data, key)
-        result = if value, do: {:ok, value}, else: {:error, :not_found}
-        {state, result}
+  defp write_impl(key, value, state) do
+    new_data = Map.put(state.data, key, value)
+    new_state = %{state | data: new_data}
+    {new_state, :ok}
+  end
 
-      ["write", key, value] ->
-        # Write operations through VSR consensus
-        new_data = Map.put(state.data, key, value)
-        new_state = %{state | data: new_data}
-        {new_state, :ok}
+  defp cas_impl(key, from_value, to_value, state) do
+    current_value = Map.get(state.data, key)
 
-      ["cas", key, from_value, to_value] ->
-        # Compare-and-swap operations through VSR consensus
-        current_value = Map.get(state.data, key)
-
-        if current_value == from_value do
-          new_data = Map.put(state.data, key, to_value)
-          new_state = %{state | data: new_data}
-          {new_state, :ok}
-        else
-          # CAS failed - precondition not met
-          {state, {:error, :precondition_failed}}
-        end
-
-      _other ->
-        {state, :ok}
+    if current_value == from_value do
+      new_data = Map.put(state.data, key, to_value)
+      new_state = %{state | data: new_data}
+      {new_state, :ok}
+    else
+      # CAS failed - precondition not met
+      {state, {:error, :precondition_failed}}
     end
   end
 
-  def send_reply(from, reply, inner_state) do
-    # For Maelstrom, the 'from' parameter is the original Maelstrom message
-    case from do
-      %Maelstrom.Message{} = message ->
-        # Send Maelstrom JSON reply based on the operation result
-        case {message.body, reply} do
-          {%Echo{}, _result} ->
-            # Echo replies include the original echo value
-            Message.reply(message.body, to: message, echo: message.body.echo)
+  # VSR commit handler for Maelstrom operations
+  def handle_commit(["read", key], state), do: read_impl(key, state)
+  def handle_commit(["write", key, value], state), do: write_impl(key, value, state)
+  def handle_commit(["cas", key, from_value, to_value], state), do: cas_impl(key, from_value, to_value, state)
+  # No other commit messages are acknoweldeged.
 
-          {%Read{}, {:ok, value}} ->
-            # Read success replies include the value
-            Message.reply(message.body, to: message, value: value)
-
-          {%Read{}, {:error, :not_found}} ->
-            # Read error for missing key
-            send_error_reply_direct(message, 20, "key not found")
-
-          {%Write{}, :ok} ->
-            # Write success replies
-            Message.reply(message.body, to: message)
-
-          {%Cas{}, :ok} ->
-            # CAS success replies
-            Message.reply(message.body, to: message)
-
-          {%Cas{}, {:error, :precondition_failed}} ->
-            # CAS precondition failed
-            send_error_reply_direct(message, 22, "precondition failed")
-
-          _ ->
-            # Generic error reply
-            send_error_reply_direct(message, 13, "temporarily unavailable")
-        end
-
-      %{"node" => node_id, "from" => from_hash} ->
-        # Legacy format for remote replies via ForwardedReply
-        our_node_id = VsrServer.node_id()
-
-        if node_id == our_node_id do
-          # Local reply using ETS lookup
-          case fetch_from(inner_state, from_hash) do
-            {:ok, from_tuple} ->
-              # Get the original Maelstrom message from ETS
-              case :ets.lookup(inner_state.from_table, "message_#{from_hash}") do
-                [{_, message}] ->
-                  # Send Maelstrom JSON reply based on operation result
-                  case {message.body, reply} do
-                    {%Read{}, {:ok, value}} ->
-                      message.dest
-                      |> Message.new(message.src, Message.reply(message.body, {:ok, value}))
-                      |> JSON.encode!()
-                      |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-                      |> IO.puts()
-
-                    {%Read{}, {:error, :not_found}} ->
-                      send_error_reply_direct(message, 20, "key not found")
-
-                    {%Write{}, :ok} ->
-                      message.dest
-                      |> Message.new(message.src, Message.reply(message.body, :ok))
-                      |> JSON.encode!()
-                      |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-                      |> IO.puts()
-
-                    {%Cas{}, :ok} ->
-                      message.dest
-                      |> Message.new(message.src, Message.reply(message.body, :ok))
-                      |> JSON.encode!()
-                      |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-                      |> IO.puts()
-
-                    {%Cas{}, {:error, :precondition_failed}} ->
-                      send_error_reply_direct(message, 22, "precondition failed")
-
-                    _ ->
-                      send_error_reply_direct(message, 13, "temporarily unavailable")
-                  end
-
-                  # Clean up ETS entries
-                  delete_from(inner_state, from_hash)
-                  :ets.delete(inner_state.from_table, "message_#{from_hash}")
-
-                  # Send GenServer reply to unblock the call
-                  GenServer.reply(from_tuple, reply)
-
-                [] ->
-                  Logger.error(
-                    "Local reply: message for from_hash #{from_hash} not found in ETS table"
-                  )
-
-                  delete_from(inner_state, from_hash)
-                  GenServer.reply(from_tuple, {:error, :no_message_found})
-              end
-
-            {:error, :not_found} ->
-              Logger.error("Local reply: from_hash #{from_hash} not found in ETS table")
-          end
-        else
-          # Remote reply via ForwardedReply
-          our_node_id
-          |> Message.new(node_id, %Maelstrom.Message.ForwardedReply{
-            from_hash: from_hash,
-            result: reply
-          })
-          |> JSON.encode!()
-          |> tap(&Logger.debug("Sending Maelstrom message: #{&1}"))
-          |> IO.puts()
-        end
-
-      _ ->
-        # Direct GenServer reply for local operations
-        GenServer.reply(from, reply)
+  def send_reply(%{"node" => node_id, "from" => from_hash}, reply, state) do
+    if node_id == VsrServer.node_id() do
+      local_reply(state, from_hash, reply)
+    else
+      VsrServer.node_id()
+      |> Message.new(node_id, %ForwardedReply{from_hash: from_hash, result: reply})
+      |> JSON.encode!()
+      |> IO.puts()
     end
   end
 
@@ -469,7 +298,7 @@ defmodule MaelstromKv do
   @doc """
   Store a GenServer.from tuple in ETS and return a hash for Maelstrom transmission.
   """
-  def store_from(state, from_tuple) do
+  def push_from(state, from_tuple) do
     from_hash = :erlang.phash2(from_tuple)
     :ets.insert(state.from_table, {from_hash, from_tuple})
     from_hash
@@ -478,10 +307,13 @@ defmodule MaelstromKv do
   @doc """
   Retrieve a GenServer.from tuple from ETS using the hash.
   """
-  def fetch_from(state, from_hash) do
-    case :ets.lookup(state.from_table, from_hash) do
-      [{^from_hash, from_tuple}] -> {:ok, from_tuple}
-      [] -> {:error, :not_found}
+  def local_reply(%{from_table: from_table}, from_hash, reply) do
+    case :ets.lookup(from_table, from_hash) do
+      [{^from_hash, from}] ->
+        :ets.delete(from_table, from_hash)
+        GenServer.reply(from, reply)
+      [] ->
+        Logger.error("reply failed, could not find hash #{from_hash}")
     end
   end
 
@@ -501,38 +333,22 @@ defmodule MaelstromKv do
 
     case message.body do
       %Init{} = init ->
-        do_init(init, message, state)
+        do_init(init, from, state)
 
       %Echo{} = echo ->
-        do_echo(echo, message, state)
+        do_echo(echo, from, state)
 
       %Read{} = read ->
-        do_read(read, message, from, state)
+        do_read(read, from, state)
 
       %Write{} = write ->
-        do_write(write, message, from, state)
+        do_write(write, from, state)
 
       %Cas{} = cas ->
-        do_cas(cas, message, from, state)
+        do_cas(cas, from, state)
 
       %ForwardedReply{} = forwarded_reply ->
-        do_forwarded_reply(forwarded_reply, message, state)
+        do_forwarded_reply(forwarded_reply, from, state)
     end
-  end
-
-  # ETS translation layer GenServer API
-  def handle_call({:store_from, from_tuple}, _from, state) do
-    from_hash = store_from(state, from_tuple)
-    {:reply, from_hash, state}
-  end
-
-  def handle_call({:fetch_from, from_hash}, _from, state) do
-    result = fetch_from(state, from_hash)
-    {:reply, result, state}
-  end
-
-  def handle_call({:delete_from, from_hash}, _from, state) do
-    result = delete_from(state, from_hash)
-    {:reply, result, state}
   end
 end
