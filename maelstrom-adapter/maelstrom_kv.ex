@@ -163,7 +163,7 @@ defmodule MaelstromKv do
     {:noreply, state, request_with(["cas", key, cas_from, to], from, state)}
   end
 
-  defp do_forwarded_reply(%ForwardedReply{from_hash: from_hash} = forwarded_reply, _from, state) do
+  defp do_forwarded_reply(%{from_hash: from_hash} = forwarded_reply, _from, state) do
     # Decode the base64 encoded reply back to Erlang term
     decoded_reply = ForwardedReply.decode_reply(forwarded_reply)
     # Get the from_tuple from our ETS table and reply
@@ -196,12 +196,6 @@ defmodule MaelstromKv do
     end
   end
 
-  # VSR commit handler for Maelstrom operations
-  def handle_commit(["read", key], state), do: read_impl(key, state)
-  def handle_commit(["write", key, value], state), do: write_impl(key, value, state)
-  def handle_commit(["cas", key, from_value, to_value], state), do: cas_impl(key, from_value, to_value, state)
-  # No other commit messages are acknoweldeged.
-
   def send_reply(%{"node" => node_id, "from" => from_hash}, reply, state) do
     if node_id == VsrServer.node_id() do
       local_reply(state, from_hash, reply)
@@ -233,12 +227,10 @@ defmodule MaelstromKv do
   end
 
   def log_get_all(log) do
-    # Use select to get all entries efficiently - much faster than foldl
     :dets.select(log, [{{:"$1", :"$2"}, [], [:"$2"]}])
   end
 
   def log_get_from(log, op_number) do
-    # Use select with guard to filter entries efficiently
     :dets.select(log, [{{:"$1", :"$2"}, [{:>=, {:map_get, :op_number, :"$2"}, op_number}], [:"$2"]}])
   end
 
@@ -286,6 +278,12 @@ defmodule MaelstromKv do
   end
 
   ## ROUTER
+
+  # VSR commit handler for Maelstrom operations
+  def handle_commit(["read", key], state), do: read_impl(key, state)
+  def handle_commit(["write", key, value], state), do: write_impl(key, value, state)
+  def handle_commit(["cas", key, from_value, to_value], state), do: cas_impl(key, from_value, to_value, state)
+  # No other commit messages are acknowledged.
 
   # Handle Maelstrom JSON protocol messages
   def handle_call({:message, message}, from, state) do
