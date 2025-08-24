@@ -32,7 +32,7 @@ defmodule Vsr.ListKv do
   end
 
   # VSR commit callback - apply operations to the state machine
-  def handle_commit(operation, state, _vsr_state) do
+  def handle_commit(operation, state) do
     case operation do
       {:read, key} ->
         result = Map.get(state.data, key)

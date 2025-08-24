@@ -10,7 +10,7 @@ defmodule VsrServerTest do
 
   setup do
     opts = [
-      # Single node for basic testing  
+      # Single node for basic testing
       cluster_size: 1,
       node_id: "n0",
       # No other replicas
@@ -33,8 +33,7 @@ defmodule VsrServerTest do
       operation = {:set, "test_key", "test_value"}
 
       state = VsrServer.dump(server)
-      inner_state = state.inner
-      {new_inner, result} = Vsr.ListKv.handle_commit(operation, inner_state, state)
+      {new_inner, result} = Vsr.ListKv.handle_commit(operation, state.inner)
 
       assert result == {:ok, "test_value"}
       assert new_inner.data["test_key"] == "test_value"

@@ -232,7 +232,7 @@ defmodule MaelstromKv do
   end
 
   # VSR commit handler for Maelstrom operations
-  def handle_commit(operation, state, _vsr_state) do
+  def handle_commit(operation, state) do
     case operation do
       ["read", key] ->
         # Read operations through VSR consensus

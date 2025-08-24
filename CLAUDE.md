@@ -870,7 +870,7 @@ When debugging fails repeatedly:
 
 2. **handle_commit function**:
    ```elixir
-   def handle_commit(["write", key, value], state, _vsr_state) do
+   def handle_commit(["write", key, value], state) do
      new_data = Map.put(state.data, key, value)
      new_state = %{state | data: new_data}
      {new_state, :ok}  # VSR handles reply via send_reply callback
