@@ -182,7 +182,7 @@ defmodule VsrTest do
     state2 = VsrServer.dump(replica2)
     state3 = VsrServer.dump(replica3)
 
-    # Each replica should be connected to the other two  
+    # Each replica should be connected to the other two
     assert MapSet.size(state1.replicas) == 2
     assert MapSet.size(state2.replicas) == 2
     assert MapSet.size(state3.replicas) == 2

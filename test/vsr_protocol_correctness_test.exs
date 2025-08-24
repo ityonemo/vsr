@@ -426,7 +426,7 @@ defmodule VsrProtocolCorrectnessTest do
       # Test the core deduplication behavior
       _state = VsrServer.dump(replica)
 
-      operation = {:increment_counter}
+      operation = :increment_counter
       client_id = "test_client_456"
       request_id = 100
 
