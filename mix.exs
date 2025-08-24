@@ -41,7 +41,7 @@ defmodule Vsr.MixProject do
       {:protoss, "~> 1.1"},
       {:mox, "~> 1.0", only: :test},
       # MCP TOOLS
-      {:tidewave, path: "deps/tidewave"}, #"~> 0.4", only: :dev},
+      {:tidewave, "~> 0.4", only: :dev},
       {:bandit, "~> 1.0", only: :dev},
     ]
   end

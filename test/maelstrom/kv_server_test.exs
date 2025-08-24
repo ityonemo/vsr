@@ -7,6 +7,7 @@ defmodule Maelstrom.KvServerTest do
   """
 
   use ExUnit.Case, async: true
+  alias VsrServer
 
   setup t do
     # Use temporary directory for DETS files
@@ -16,7 +17,15 @@ defmodule Maelstrom.KvServerTest do
     dets_file = Path.join(temp_dir, "kv_test_#{unique_id}_log.dets")
     
     pid =
-      start_supervised!({MaelstromKv, name: :"#{t.test}-node", node_id: node_id, dets_file: dets_file, replicas: []})
+      start_supervised!({MaelstromKv, name: :"#{t.test}-node", dets_root: temp_dir})
+
+    # Set cluster configuration (single-node cluster for unit tests)
+    VsrServer.set_cluster(pid, node_id, [], 1)
+
+    # Set up DETS log
+    table_name = String.to_atom("kv_test_log_#{unique_id}")
+    {:ok, log} = :dets.open_file(table_name, file: String.to_charlist(dets_file))
+    VsrServer.set_log(pid, log)
 
     # Clean up DETS file on test completion
     on_exit(fn ->
