@@ -6,8 +6,11 @@ maelstrom.jar
 /maelstrom/
 store/
 
-# DETS files  
+# DETS files
 *.dets
 
 # Logs
 *.log
+
+# Environment
+.envrc
