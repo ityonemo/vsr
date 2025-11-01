@@ -16,7 +16,6 @@ defmodule VsrServer do
   alias Vsr.Message.PrepareOk
   alias Vsr.Message.Commit
   alias Vsr.Message.StartViewChange
-  alias Vsr.Message.StartViewChangeAck
   alias Vsr.Message.DoViewChange
   alias Vsr.Message.StartView
   alias Vsr.Message.GetState
@@ -1048,7 +1047,8 @@ defmodule VsrServer do
 
   # View change implementations
   defp start_view_change_impl(%StartViewChange{} = start_view_change, state) do
-    if start_view_change.view > state.view_number do
+    cond do
+      start_view_change.view > state.view_number ->
       # If this node was primary, emit leadership span stop event
       if primary?(state) and state.leadership_span_context do
         start_time = System.monotonic_time()
@@ -1102,39 +1102,27 @@ defmodule VsrServer do
         }
       )
 
-      # Broadcast START-VIEW-CHANGE-ACK to ALL replicas
-      ack_msg = %StartViewChangeAck{
+      # Broadcast our own StartViewChange to all replicas (including back to sender)
+      our_start_view_change = %StartViewChange{
         view: start_view_change.view,
         replica: state.node_id
       }
 
-      broadcast(new_state, ack_msg)
-      # Also send to self
-      send(self(), {:"$vsr", ack_msg})
+      broadcast(new_state, our_start_view_change)
 
-      {:noreply, new_state}
-    else
-      {:noreply, state}
-    end
-  end
+      # Count the original StartViewChange vote
+      existing_votes = Map.get(new_state.view_change_votes, start_view_change.view, [])
 
-  defp start_view_change_ack_impl(%StartViewChangeAck{} = ack, state) do
-    if ack.view == state.view_number and state.status == :view_change do
-      # Count view change votes, ensuring no duplicates
-      existing_votes = Map.get(state.view_change_votes, ack.view, [])
-
-      # Only add if not already in the list
       updated_votes =
-        if ack.replica in existing_votes do
+        if start_view_change.replica in existing_votes do
           existing_votes
         else
-          [ack.replica | existing_votes]
+          [start_view_change.replica | existing_votes]
         end
 
-      votes = Map.put(state.view_change_votes, ack.view, updated_votes)
-      new_state = %{state | view_change_votes: votes}
+      votes = Map.put(new_state.view_change_votes, start_view_change.view, updated_votes)
+      new_state = %{new_state | view_change_votes: votes}
 
-      # Check if we have enough votes to proceed from cluster
       vote_count = length(updated_votes)
 
       # Emit telemetry for vote received
@@ -1143,18 +1131,18 @@ defmodule VsrServer do
         state,
         %{vote_count: vote_count, required: div(state.cluster_size, 2) + 1},
         %{
-          from: ack.replica
+          from: start_view_change.replica
         }
       )
 
-      # Only send DO-VIEW-CHANGE once when we first reach majority
+      # Check if we have enough votes to send DoViewChange
       if vote_count > div(state.cluster_size, 2) and
            length(existing_votes) <= div(state.cluster_size, 2) do
-        # Just reached enough votes, send DO-VIEW-CHANGE to new primary
-        new_primary = primary_for_view(ack.view, state)
+        # Just reached quorum, send DO-VIEW-CHANGE to new primary
+        new_primary = primary_for_view(start_view_change.view, state)
 
         do_view_change_msg = %DoViewChange{
-          view: ack.view,
+          view: start_view_change.view,
           log: get_all_log_entries(state),
           last_normal_view: state.last_normal_view,
           op_number: state.op_number,
@@ -1173,15 +1161,71 @@ defmodule VsrServer do
         )
 
         send_to(state, new_primary, do_view_change_msg)
+      end
+
+      {:noreply, new_state}
+
+      start_view_change.view == state.view_number and state.status == :view_change ->
+        # Already in view_change for this view, just count the vote
+        existing_votes = Map.get(state.view_change_votes, start_view_change.view, [])
+
+        updated_votes =
+          if start_view_change.replica in existing_votes do
+            existing_votes
+          else
+            [start_view_change.replica | existing_votes]
+          end
+
+        votes = Map.put(state.view_change_votes, start_view_change.view, updated_votes)
+        new_state = %{state | view_change_votes: votes}
+
+        vote_count = length(updated_votes)
+
+        # Emit telemetry for vote received
+        Telemetry.execute(
+          [:view_change, :vote_received],
+          state,
+          %{vote_count: vote_count, required: div(state.cluster_size, 2) + 1},
+          %{
+            from: start_view_change.replica
+          }
+        )
+
+        # Check if we just reached quorum
+        if vote_count > div(state.cluster_size, 2) and
+             length(existing_votes) <= div(state.cluster_size, 2) do
+          # Just reached quorum, send DO-VIEW-CHANGE to new primary
+          new_primary = primary_for_view(start_view_change.view, state)
+
+          do_view_change_msg = %DoViewChange{
+            view: start_view_change.view,
+            log: get_all_log_entries(state),
+            last_normal_view: state.last_normal_view,
+            op_number: state.op_number,
+            commit_number: state.commit_number,
+            from: state.node_id
+          }
+
+          # Emit telemetry for do_view_change sent
+          Telemetry.execute(
+            [:view_change, :do_view_change, :sent],
+            state,
+            %{count: 1},
+            %{
+              to: new_primary
+            }
+          )
+
+          send_to(state, new_primary, do_view_change_msg)
+        end
 
         {:noreply, new_state}
-      else
-        {:noreply, new_state}
-      end
-    else
-      {:noreply, state}
+
+      :else ->
+        {:noreply, state}
     end
   end
+
 
   defp do_view_change_impl(%DoViewChange{} = do_view_change, state) do
     # Emit telemetry for do_view_change received
@@ -1859,7 +1903,6 @@ defmodule VsrServer do
       %PrepareOk{} -> prepare_ok_impl(vsr_message, state)
       %Commit{} -> commit_impl(vsr_message, state)
       %StartViewChange{} -> start_view_change_impl(vsr_message, state)
-      %StartViewChangeAck{} -> start_view_change_ack_impl(vsr_message, state)
       %DoViewChange{} -> do_view_change_impl(vsr_message, state)
       %StartView{} -> start_view_impl(vsr_message, state)
       %GetState{} -> get_state_impl(vsr_message, state)

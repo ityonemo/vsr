@@ -13,7 +13,6 @@ defmodule ViewChangeTest do
   use ExUnit.Case, async: true
 
   alias Vsr.Message.StartViewChange
-  alias Vsr.Message.StartViewChangeAck
   alias Vsr.Message.DoViewChange
   alias Vsr.Message.StartView
   alias TelemetryHelper
@@ -127,24 +126,22 @@ defmodule ViewChangeTest do
     end
   end
 
-  describe "start_view_change_ack_impl/2" do
-    test "collects view change acks and sends DoViewChange when majority reached", %{
+  describe "start_view_change_impl/2 vote counting" do
+    test "collects StartViewChange votes and sends DoViewChange when majority reached", %{
       replicas: [replica1, _replica2, _replica3],
       node_ids: [node1_id, node2_id, _node3_id]
     } do
       # Put replica1 in view_change status for view 1
       telemetry_ref = TelemetryHelper.expect([:state, :status_change])
-      start_view_change_msg = %StartViewChange{view: 1, replica: node1_id}
-      VsrServer.vsr_send(replica1, start_view_change_msg)
+      start_view_change_msg1 = %StartViewChange{view: 1, replica: node1_id}
+      VsrServer.vsr_send(replica1, start_view_change_msg1)
       TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
-      # Send StartViewChangeAck from different replicas
+      # Send StartViewChange from different replicas (directly counted now)
       telemetry_ref2 = TelemetryHelper.expect([:view_change, :vote_received])
-      ack1 = %StartViewChangeAck{view: 1, replica: node1_id}
-      ack2 = %StartViewChangeAck{view: 1, replica: node2_id}
+      start_view_change_msg2 = %StartViewChange{view: 1, replica: node2_id}
 
-      VsrServer.vsr_send(replica1, ack1)
-      VsrServer.vsr_send(replica1, ack2)
+      VsrServer.vsr_send(replica1, start_view_change_msg2)
       TelemetryHelper.wait_for(telemetry_ref2)
 
       # Check that view_change_votes are being tracked
@@ -156,7 +153,7 @@ defmodule ViewChangeTest do
       TelemetryHelper.detach(telemetry_ref2)
     end
 
-    test "ignores duplicate acks from same replica", %{
+    test "ignores duplicate StartViewChange from same replica", %{
       replicas: [replica1 | _],
       node_ids: [node1_id | _]
     } do
@@ -166,17 +163,19 @@ defmodule ViewChangeTest do
       VsrServer.vsr_send(replica1, start_view_change_msg)
       TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
-      # Send same ack twice
+      # Send same StartViewChange again
       telemetry_ref2 = TelemetryHelper.expect([:view_change, :vote_received])
-      ack = %StartViewChangeAck{view: 1, replica: node1_id}
-      VsrServer.vsr_send(replica1, ack)
-      VsrServer.vsr_send(replica1, ack)
+      VsrServer.vsr_send(replica1, start_view_change_msg)
       TelemetryHelper.wait_for(telemetry_ref2)
 
-      # Should only count once
+      # With new implementation, each replica broadcasts their own StartViewChange
+      # So we end up collecting votes from all replicas, not just the original sender
+      # The important thing is that duplicate StartViewChange from the SAME replica
+      # doesn't increase the vote count
       state = VsrServer.dump(replica1)
       votes = Map.get(state.view_change_votes, 1, [])
-      assert length(votes) == 1
+      # Each replica's vote should only be counted once (no duplicates from same replica)
+      assert length(votes) == length(Enum.uniq(votes))
 
       TelemetryHelper.detach(telemetry_ref)
       TelemetryHelper.detach(telemetry_ref2)
