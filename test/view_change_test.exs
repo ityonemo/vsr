@@ -208,6 +208,7 @@ defmodule ViewChangeTest do
 
       # Send DoViewChange message (only processed if replica1 is primary for view 1)
       telemetry_ref2 = TelemetryHelper.expect([:view_change, :do_view_change, :received])
+
       do_view_change_msg = %DoViewChange{
         view: 1,
         # Empty log for test
@@ -307,6 +308,7 @@ defmodule ViewChangeTest do
 
       # Send StartView message
       telemetry_ref = TelemetryHelper.expect([:view_change, :complete])
+
       start_view_msg = %StartView{
         view: 2,
         # Empty log for test
@@ -353,7 +355,6 @@ defmodule ViewChangeTest do
       TelemetryHelper.detach(telemetry_ref)
     end
   end
-
 
   describe "start_manual_view_change/1" do
     test "initiates view change when primary inactivity timeout occurs", %{
@@ -458,6 +459,7 @@ defmodule ViewChangeTest do
 
       # Simulate receiving StartView (as if we completed view change)
       telemetry_ref3 = TelemetryHelper.expect([:view_change, :complete])
+
       start_view_msg = %StartView{
         view: 1,
         # In real scenario, this would preserve the log

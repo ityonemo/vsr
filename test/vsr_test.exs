@@ -309,6 +309,7 @@ defmodule VsrTest do
     if state.node_id == expected_primary do
       assert state.leadership_span_context != nil,
              "Primary node should have leadership_span_context"
+
       assert is_reference(state.leadership_span_context),
              "leadership_span_context should be a reference"
     end

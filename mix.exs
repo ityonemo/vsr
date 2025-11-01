@@ -10,11 +10,20 @@ defmodule Vsr.MixProject do
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
       elixirc_options: elixirc_options(Mix.env()),
-      aliases: [
-        mcps:
-          "run --no-halt -e 'Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000); Bandit.start_link(plug: Codicil.Plug, port: 4700) end)'",
-      ]
+      aliases: aliases()
     ]
+  end
+
+  defp use_mcp, do: System.get_env("USE_MCPS") == "true"
+
+  defp aliases do
+    List.wrap(
+      if use_mcp(),
+        do: {
+          :mcps,
+          "run --no-halt -e 'Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000); Bandit.start_link(plug: Codicil.Plug, port: 4700) end)'"
+        }
+    )
   end
 
   # Run "mix help compile.app" to learn about applications.
@@ -44,11 +53,21 @@ defmodule Vsr.MixProject do
     [
       {:protoss, "~> 1.1"},
       {:telemetry, "~> 1.0"},
-      {:mox, "~> 1.0", only: :test},
-      # MCP TOOLS
-      {:tidewave, "~> 0.4", only: :dev},
-      {:bandit, "~> 1.0", only: [:dev, :test]},
-      {:codicil, path: "../codicil", only: [:dev, :test]}, # "~> 0.2", only: [:dev, :test]}
-    ]
+      {:mox, "~> 1.0", only: :test}
+    ] ++ mcp_tools()
+  end
+
+  defp mcp_tools do
+    List.wrap(
+      if use_mcp() do
+        [
+          # MCP TOOLS
+          {:tidewave, "~> 0.4", only: :dev},
+          {:bandit, "~> 1.0", only: [:dev, :test]},
+          # "~> 0.2", only: [:dev, :test]}
+          {:codicil, path: "../codicil", only: [:dev, :test]}
+        ]
+      end
+    )
   end
 end
