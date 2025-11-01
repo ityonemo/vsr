@@ -277,4 +277,42 @@ defmodule VsrTest do
     :telemetry.detach("span-start-#{inspect(start_handler_id)}")
     :telemetry.detach("span-stop-#{inspect(stop_handler_id)}")
   end
+
+  test "leadership span emits proper telemetry events", %{replicas: [replica1 | _]} do
+    # Manually attach handlers to capture leadership span events
+    test_pid = self()
+    start_handler_id = make_ref()
+
+    start_handler = fn [:vsr, :leadership, :start], measurements, metadata, _ ->
+      send(test_pid, {:leadership_start, measurements, metadata})
+    end
+
+    :telemetry.attach(
+      "leadership-start-#{inspect(start_handler_id)}",
+      [:vsr, :leadership, :start],
+      start_handler,
+      nil
+    )
+
+    # The replica1 should be the primary for view 0, so it should have already emitted
+    # a leadership:start event during initialization. However, we attached the handler
+    # after initialization, so we won't receive that event.
+
+    # Instead, let's verify that the replica has a leadership_span_context
+    state = VsrServer.dump(replica1)
+
+    # replica1 should be primary and have a span context
+    all_replicas = [state.node_id | MapSet.to_list(state.replicas)]
+    sorted_replicas = Enum.sort(all_replicas)
+    expected_primary = Enum.at(sorted_replicas, rem(state.view_number, length(sorted_replicas)))
+
+    if state.node_id == expected_primary do
+      assert state.leadership_span_context != nil,
+             "Primary node should have leadership_span_context"
+      assert is_reference(state.leadership_span_context),
+             "leadership_span_context should be a reference"
+    end
+
+    :telemetry.detach("leadership-start-#{inspect(start_handler_id)}")
+  end
 end

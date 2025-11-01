@@ -395,7 +395,8 @@ defmodule VsrServer do
                 primary_inactivity_timeout: 5000,
                 view_change_timeout: 10_000,
                 heartbeat_interval: 1000,
-                client_table: %{}
+                client_table: %{},
+                leadership_span_context: nil
               ]
 
   # the internal implementation of the VSR server state should be opaque to any
@@ -430,7 +431,8 @@ defmodule VsrServer do
             primary_inactivity_timeout: non_neg_integer(),
             view_change_timeout: non_neg_integer(),
             heartbeat_interval: non_neg_integer(),
-            client_table: %{optional(node_id()) => client_entry}
+            client_table: %{optional(node_id()) => client_entry},
+            leadership_span_context: reference() | nil
           }
 
   def start_link(module, opts) do
@@ -1040,6 +1042,23 @@ defmodule VsrServer do
   # View change implementations
   defp start_view_change_impl(%StartViewChange{} = start_view_change, state) do
     if start_view_change.view > state.view_number do
+      # If this node was primary, emit leadership span stop event
+      if primary?(state) and state.leadership_span_context do
+        start_time = System.monotonic_time()
+
+        Telemetry.execute(
+          [:leadership, :stop],
+          state,
+          %{
+            monotonic_time: start_time,
+            duration: 0
+          },
+          %{
+            telemetry_span_context: state.leadership_span_context
+          }
+        )
+      end
+
       # Emit telemetry for view change start
       Telemetry.execute(
         [:view_change, :start],
@@ -1061,7 +1080,8 @@ defmodule VsrServer do
         | status: :view_change,
           view_number: start_view_change.view,
           last_normal_view: state.view_number,
-          prepare_ok_count: cleared_prepare_ok_count
+          prepare_ok_count: cleared_prepare_ok_count,
+          leadership_span_context: nil
       }
 
       # Emit telemetry for status change
@@ -1676,11 +1696,27 @@ defmodule VsrServer do
 
   # Timer management
   defp start_timers(state) do
-    heartbeat_ref =
+    {heartbeat_ref, span_context} =
       if primary?(state) do
-        Process.send_after(self(), :"$vsr_heartbeat_tick", state.heartbeat_interval)
+        # Emit leadership span start event
+        span_ctx = make_ref()
+
+        Telemetry.execute(
+          [:leadership, :start],
+          state,
+          %{
+            system_time: System.system_time(),
+            monotonic_time: System.monotonic_time()
+          },
+          %{
+            telemetry_span_context: span_ctx
+          }
+        )
+
+        timer_ref = Process.send_after(self(), :"$vsr_heartbeat_tick", state.heartbeat_interval)
+        {timer_ref, span_ctx}
       else
-        nil
+        {nil, nil}
       end
 
     inactivity_ref =
@@ -1694,7 +1730,12 @@ defmodule VsrServer do
         nil
       end
 
-    %{state | heartbeat_timer_ref: heartbeat_ref, primary_inactivity_timer_ref: inactivity_ref}
+    %{
+      state
+      | heartbeat_timer_ref: heartbeat_ref,
+        primary_inactivity_timer_ref: inactivity_ref,
+        leadership_span_context: span_context
+    }
   end
 
   defp reset_primary_inactivity_timer(state) do
@@ -1721,14 +1762,30 @@ defmodule VsrServer do
       Process.cancel_timer(state.heartbeat_timer_ref)
     end
 
-    new_ref =
+    {new_ref, span_context} =
       if primary?(state) do
-        Process.send_after(self(), :"$vsr_heartbeat_tick", state.heartbeat_interval)
+        # Emit leadership span start event
+        span_ctx = make_ref()
+
+        Telemetry.execute(
+          [:leadership, :start],
+          state,
+          %{
+            system_time: System.system_time(),
+            monotonic_time: System.monotonic_time()
+          },
+          %{
+            telemetry_span_context: span_ctx
+          }
+        )
+
+        timer_ref = Process.send_after(self(), :"$vsr_heartbeat_tick", state.heartbeat_interval)
+        {timer_ref, span_ctx}
       else
-        nil
+        {nil, nil}
       end
 
-    %{state | heartbeat_timer_ref: new_ref}
+    %{state | heartbeat_timer_ref: new_ref, leadership_span_context: span_context}
   end
 
   # Log callback adapters
