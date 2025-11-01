@@ -34,6 +34,12 @@ A distributed consensus system implementing the Viewstamped Replication (VSR) pr
 - **Workaround**: Implement request deduplication at the application layer using unique request IDs
 - **Future Work**: Full write operation deduplication requires propagating client identifiers through the entire VSR protocol
 
+⚠️ **No Reconfiguration Support**: The implementation assumes a static cluster with fixed membership. Dynamic addition or removal of replicas (reconfiguration protocol from the VSR paper) is not currently supported.
+
+- **Limitation**: Cluster size and membership must be determined at startup and cannot be changed during operation
+- **Workaround**: Plan cluster capacity ahead of time to accommodate expected load
+- **Future Work**: Implement the reconfiguration protocol described in "Viewstamped Replication Revisited"
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
