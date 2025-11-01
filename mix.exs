@@ -13,7 +13,9 @@ defmodule Vsr.MixProject do
       aliases: aliases(),
       description: description(),
       package: package(),
-      source_url: "https://github.com/ityonemo/vsr"
+      source_url: "https://github.com/ityonemo/vsr",
+      homepage_url: "https://github.com/ityonemo/vsr",
+      docs: docs()
     ]
   end
 
@@ -33,6 +35,30 @@ defmodule Vsr.MixProject do
         "GitHub" => "https://github.com/ityonemo/vsr"
       },
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "VsrServer",
+      extras: ["README.md", "CHANGELOG.md", "SPECIFICATION.md", "TELEMETRY_EVENTS.md"],
+      groups_for_modules: [
+        "Core": [VsrServer],
+        "Messages": [
+          Vsr.Message,
+          Vsr.Message.ClientRequest,
+          Vsr.Message.Prepare,
+          Vsr.Message.PrepareOk,
+          Vsr.Message.Commit,
+          Vsr.Message.StartViewChange,
+          Vsr.Message.DoViewChange,
+          Vsr.Message.StartView,
+          Vsr.Message.GetState,
+          Vsr.Message.NewState,
+          Vsr.Message.Heartbeat
+        ],
+        "Support": [Vsr.LogEntry, Vsr.Telemetry]
+      ]
     ]
   end
 
@@ -74,7 +100,8 @@ defmodule Vsr.MixProject do
   defp deps do
     [
       {:telemetry, "~> 1.0"},
-      {:mox, "~> 1.0", only: :test}
+      {:mox, "~> 1.0", only: :test},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ] ++ mcp_tools()
   end
 

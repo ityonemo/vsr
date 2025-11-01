@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="vsr v0.1.0">
+
+
+    <title>VsrServer — vsr v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-ZFNMEJKT.css" />
+
+    <script defer src="dist/sidebar_items-6AC56441.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="https://github.com/ityonemo/vsr" class="sidebar-projectName" translate="no">
+vsr
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-behaviour" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of vsr</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">VsrServer</span> <small>behaviour</small>
+      <small class="app-vsn" translate="no">(vsr v0.1.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>GenServer wrapper that implements the VSR (Viewstamped Replication) protocol.</p><p>This module provides a framework for building VSR-enabled services by handling
+all VSR protocol messages while delegating application-specific logic to
+the implementing module.</p><h2 id="module-overview" class="section-heading"><a href="#module-overview" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Overview</span></h2><p>VsrServer implements the core VSR consensus protocol including:</p><ul><li>Primary-backup replication with automatic failover</li><li>View changes for fault tolerance</li><li>Quorum-based consensus decisions</li><li>Linearizable operation ordering</li><li>Comprehensive telemetry instrumentation</li></ul><h2 id="module-basic-usage" class="section-heading"><a href="#module-basic-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Basic Usage</span></h2><p>To create a VSR-enabled service, you need to implement the VsrServer behaviour
+and provide three key components:</p><ol><li><strong>State Machine</strong>: Handles application operations</li><li><strong>Communication Layer</strong>: Routes VSR protocol messages between nodes</li><li><strong>Optional Configuration</strong>: Cluster size, timeouts, etc.</li></ol><h3 id="module-minimal-example" class="section-heading"><a href="#module-minimal-example" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Minimal Example</span></h3><pre><code class="makeup elixir" translate="no"><span class="kd">defmodule</span><span class="w"> </span><span class="nc">MyKvStore</span><span class="w"> </span><span class="k" data-group-id="1970222030-1">do</span><span class="w">
+  </span><span class="kn">use</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">start_link</span><span class="p" data-group-id="1970222030-2">(</span><span class="n">opts</span><span class="p" data-group-id="1970222030-2">)</span><span class="w"> </span><span class="k" data-group-id="1970222030-3">do</span><span class="w">
+    </span><span class="n">node_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Keyword</span><span class="o">.</span><span class="n">fetch!</span><span class="p" data-group-id="1970222030-4">(</span><span class="n">opts</span><span class="p">,</span><span class="w"> </span><span class="ss">:node_id</span><span class="p" data-group-id="1970222030-4">)</span><span class="w">
+    </span><span class="n">cluster_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Keyword</span><span class="o">.</span><span class="n">fetch!</span><span class="p" data-group-id="1970222030-5">(</span><span class="n">opts</span><span class="p">,</span><span class="w"> </span><span class="ss">:cluster_size</span><span class="p" data-group-id="1970222030-5">)</span><span class="w">
+
+    </span><span class="nc">VsrServer</span><span class="o">.</span><span class="n">start_link</span><span class="p" data-group-id="1970222030-6">(</span><span class="bp">__MODULE__</span><span class="p">,</span><span class="w">
+      </span><span class="ss">node_id</span><span class="p">:</span><span class="w"> </span><span class="n">node_id</span><span class="p">,</span><span class="w">
+      </span><span class="ss">cluster_size</span><span class="p">:</span><span class="w"> </span><span class="n">cluster_size</span><span class="w">
+    </span><span class="p" data-group-id="1970222030-6">)</span><span class="w">
+  </span><span class="k" data-group-id="1970222030-3">end</span><span class="w">
+
+  </span><span class="na">@impl</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">init</span><span class="p" data-group-id="1970222030-7">(</span><span class="n">vsr_state</span><span class="p" data-group-id="1970222030-7">)</span><span class="w"> </span><span class="k" data-group-id="1970222030-8">do</span><span class="w">
+    </span><span class="c1"># Initialize your application state</span><span class="w">
+    </span><span class="n">my_state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="1970222030-9">%{</span><span class="ss">vsr</span><span class="p">:</span><span class="w"> </span><span class="n">vsr_state</span><span class="p">,</span><span class="w"> </span><span class="ss">data</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="1970222030-10">%{</span><span class="p" data-group-id="1970222030-10">}</span><span class="p" data-group-id="1970222030-9">}</span><span class="w">
+    </span><span class="p" data-group-id="1970222030-11">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">my_state</span><span class="p" data-group-id="1970222030-11">}</span><span class="w">
+  </span><span class="k" data-group-id="1970222030-8">end</span><span class="w">
+
+  </span><span class="na">@impl</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">handle_commit</span><span class="p" data-group-id="1970222030-12">(</span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p" data-group-id="1970222030-12">)</span><span class="w"> </span><span class="k" data-group-id="1970222030-13">do</span><span class="w">
+    </span><span class="c1"># Apply committed operation to your state machine</span><span class="w">
+    </span><span class="k">case</span><span class="w"> </span><span class="n">operation</span><span class="w"> </span><span class="k" data-group-id="1970222030-14">do</span><span class="w">
+      </span><span class="p" data-group-id="1970222030-15">{</span><span class="ss">:write</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p" data-group-id="1970222030-15">}</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+        </span><span class="n">new_data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Map</span><span class="o">.</span><span class="n">put</span><span class="p" data-group-id="1970222030-16">(</span><span class="n">state</span><span class="o">.</span><span class="n">data</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p" data-group-id="1970222030-16">)</span><span class="w">
+        </span><span class="n">new_state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="1970222030-17">%{</span><span class="n">state</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="ss">data</span><span class="p">:</span><span class="w"> </span><span class="n">new_data</span><span class="p" data-group-id="1970222030-17">}</span><span class="w">
+        </span><span class="p" data-group-id="1970222030-18">{</span><span class="n">new_state</span><span class="p">,</span><span class="w"> </span><span class="ss">:ok</span><span class="p" data-group-id="1970222030-18">}</span><span class="w">
+
+      </span><span class="p" data-group-id="1970222030-19">{</span><span class="ss">:read</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p" data-group-id="1970222030-19">}</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+        </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Map</span><span class="o">.</span><span class="n">get</span><span class="p" data-group-id="1970222030-20">(</span><span class="n">state</span><span class="o">.</span><span class="n">data</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="1970222030-21">{</span><span class="ss">:error</span><span class="p">,</span><span class="w"> </span><span class="ss">:not_found</span><span class="p" data-group-id="1970222030-21">}</span><span class="p" data-group-id="1970222030-20">)</span><span class="w">
+        </span><span class="p" data-group-id="1970222030-22">{</span><span class="n">state</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="p" data-group-id="1970222030-22">}</span><span class="w">
+    </span><span class="k" data-group-id="1970222030-14">end</span><span class="w">
+  </span><span class="k" data-group-id="1970222030-13">end</span><span class="w">
+
+  </span><span class="na">@impl</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">send_reply</span><span class="p" data-group-id="1970222030-23">(</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">reply</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p" data-group-id="1970222030-23">)</span><span class="w"> </span><span class="k" data-group-id="1970222030-24">do</span><span class="w">
+    </span><span class="c1"># Send reply back to client</span><span class="w">
+    </span><span class="nc">GenServer</span><span class="o">.</span><span class="n">reply</span><span class="p" data-group-id="1970222030-25">(</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">reply</span><span class="p" data-group-id="1970222030-25">)</span><span class="w">
+  </span><span class="k" data-group-id="1970222030-24">end</span><span class="w">
+</span><span class="k" data-group-id="1970222030-1">end</span></code></pre><h2 id="module-state-machine-implementation" class="section-heading"><a href="#module-state-machine-implementation" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Machine Implementation</span></h2><p>The state machine handles application-specific operations. You must implement:</p><h3 id="module-required-callback-handle_commit-2" class="section-heading"><a href="#module-required-callback-handle_commit-2" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Required Callback: handle_commit/2</span></h3><pre><code class="makeup elixir" translate="no"><span class="na">@callback</span><span class="w"> </span><span class="n">handle_commit</span><span class="p" data-group-id="1286301819-1">(</span><span class="n">operation</span><span class="w"> </span><span class="o">::</span><span class="w"> </span><span class="n">term</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="o">::</span><span class="w"> </span><span class="n">term</span><span class="p" data-group-id="1286301819-1">)</span><span class="w"> </span><span class="o">::</span><span class="w">
+  </span><span class="p" data-group-id="1286301819-2">{</span><span class="n">new_state</span><span class="w"> </span><span class="o">::</span><span class="w"> </span><span class="n">term</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">::</span><span class="w"> </span><span class="n">term</span><span class="p" data-group-id="1286301819-2">}</span></code></pre><p>This callback is invoked when an operation has been committed by the VSR cluster.
+It should:</p><ul><li>Apply the operation to your application state</li><li>Return the updated state and operation result</li><li>Be deterministic (same operation → same result)</li></ul><p>Example:</p><pre><code class="makeup elixir" translate="no"><span class="kd">def</span><span class="w"> </span><span class="nf">handle_commit</span><span class="p" data-group-id="4375178781-1">(</span><span class="p" data-group-id="4375178781-2">{</span><span class="ss">:increment</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p" data-group-id="4375178781-2">}</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p" data-group-id="4375178781-1">)</span><span class="w"> </span><span class="k" data-group-id="4375178781-3">do</span><span class="w">
+  </span><span class="n">current</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Map</span><span class="o">.</span><span class="n">get</span><span class="p" data-group-id="4375178781-4">(</span><span class="n">state</span><span class="o">.</span><span class="n">counters</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p" data-group-id="4375178781-4">)</span><span class="w">
+  </span><span class="n">new_counters</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Map</span><span class="o">.</span><span class="n">put</span><span class="p" data-group-id="4375178781-5">(</span><span class="n">state</span><span class="o">.</span><span class="n">counters</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">current</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p" data-group-id="4375178781-5">)</span><span class="w">
+  </span><span class="n">new_state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="4375178781-6">%{</span><span class="n">state</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="ss">counters</span><span class="p">:</span><span class="w"> </span><span class="n">new_counters</span><span class="p" data-group-id="4375178781-6">}</span><span class="w">
+  </span><span class="p" data-group-id="4375178781-7">{</span><span class="n">new_state</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="4375178781-8">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">current</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p" data-group-id="4375178781-8">}</span><span class="p" data-group-id="4375178781-7">}</span><span class="w">
+</span><span class="k" data-group-id="4375178781-3">end</span></code></pre><h2 id="module-communication-layer-implementation" class="section-heading"><a href="#module-communication-layer-implementation" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Communication Layer Implementation</span></h2><p>The communication layer is implemented via the <code class="inline">send_vsr/3</code> callback on your
+module. This callback is invoked whenever VSR needs to send a protocol message
+to another node.</p><h3 id="module-default-implementation-erlang-distribution" class="section-heading"><a href="#module-default-implementation-erlang-distribution" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Default Implementation (Erlang Distribution)</span></h3><p>The <code class="inline">use VsrServer</code> macro provides a default implementation that works with
+Erlang distribution using <a href="https://hexdocs.pm/elixir/Kernel.html#send/2"><code class="inline">send/2</code></a>:</p><pre><code class="makeup elixir" translate="no"><span class="kd">defmodule</span><span class="w"> </span><span class="nc">MyKvStore</span><span class="w"> </span><span class="k" data-group-id="1544360083-1">do</span><span class="w">
+  </span><span class="kn">use</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">  </span><span class="c1"># Provides default send_vsr implementation</span><span class="w">
+
+  </span><span class="c1"># ... other callbacks</span><span class="w">
+</span><span class="k" data-group-id="1544360083-1">end</span></code></pre><p>The default implementation is:</p><pre><code class="makeup elixir" translate="no"><span class="kd">def</span><span class="w"> </span><span class="nf">send_vsr</span><span class="p" data-group-id="2741365292-1">(</span><span class="n">destination</span><span class="p">,</span><span class="w"> </span><span class="n">message</span><span class="p">,</span><span class="w"> </span><span class="c">_inner_state</span><span class="p" data-group-id="2741365292-1">)</span><span class="w"> </span><span class="k" data-group-id="2741365292-2">do</span><span class="w">
+  </span><span class="n">send</span><span class="p" data-group-id="2741365292-3">(</span><span class="n">destination</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="2741365292-4">{</span><span class="ss">:&quot;$vsr&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">message</span><span class="p" data-group-id="2741365292-4">}</span><span class="p" data-group-id="2741365292-3">)</span><span class="w">
+</span><span class="k" data-group-id="2741365292-2">end</span></code></pre><p>This works when <code class="inline">node_id</code> values are:</p><ul><li>PIDs (e.g., <code class="inline">self()</code>)</li><li>Registered names (e.g., <code class="inline">:my_server</code> or <code class="inline">{:global, :my_server}</code>)</li><li>Node names (e.g., <code class="inline">:&quot;node1@localhost&quot;</code> with registered name)</li></ul><h3 id="module-custom-communication-protocol" class="section-heading"><a href="#module-custom-communication-protocol" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Custom Communication Protocol</span></h3><p>To use a different transport (HTTP, gRPC, JSON-RPC, etc.), override the
+<code class="inline">send_vsr/3</code> callback:</p><pre><code class="makeup elixir" translate="no"><span class="kd">defmodule</span><span class="w"> </span><span class="nc">MyHttpKvStore</span><span class="w"> </span><span class="k" data-group-id="4759017520-1">do</span><span class="w">
+  </span><span class="kn">use</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+
+  </span><span class="c1"># Override the default send_vsr to use HTTP</span><span class="w">
+  </span><span class="na">@impl</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">send_vsr</span><span class="p" data-group-id="4759017520-2">(</span><span class="n">dest_node_id</span><span class="p">,</span><span class="w"> </span><span class="n">vsr_message</span><span class="p">,</span><span class="w"> </span><span class="c">_inner_state</span><span class="p" data-group-id="4759017520-2">)</span><span class="w"> </span><span class="k" data-group-id="4759017520-3">do</span><span class="w">
+    </span><span class="c1"># Serialize VSR message to JSON</span><span class="w">
+    </span><span class="n">json_body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Jason</span><span class="o">.</span><span class="n">encode!</span><span class="p" data-group-id="4759017520-4">(</span><span class="p" data-group-id="4759017520-5">%{</span><span class="w">
+      </span><span class="s">&quot;type&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">message_type</span><span class="p" data-group-id="4759017520-6">(</span><span class="n">vsr_message</span><span class="p" data-group-id="4759017520-6">)</span><span class="p">,</span><span class="w">
+      </span><span class="s">&quot;view&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">vsr_message</span><span class="o">.</span><span class="n">view</span><span class="p">,</span><span class="w">
+      </span><span class="s">&quot;data&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">serialize_message</span><span class="p" data-group-id="4759017520-7">(</span><span class="n">vsr_message</span><span class="p" data-group-id="4759017520-7">)</span><span class="w">
+    </span><span class="p" data-group-id="4759017520-5">}</span><span class="p" data-group-id="4759017520-4">)</span><span class="w">
+
+    </span><span class="c1"># Send via HTTP POST to the destination node</span><span class="w">
+    </span><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;http://</span><span class="si" data-group-id="4759017520-8">#{</span><span class="n">dest_node_id</span><span class="si" data-group-id="4759017520-8">}</span><span class="s">:8080/vsr&quot;</span><span class="w">
+    </span><span class="nc">HTTPoison</span><span class="o">.</span><span class="n">post</span><span class="p" data-group-id="4759017520-9">(</span><span class="n">url</span><span class="p">,</span><span class="w"> </span><span class="n">json_body</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="4759017520-10">[</span><span class="p" data-group-id="4759017520-11">{</span><span class="s">&quot;Content-Type&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;application/json&quot;</span><span class="p" data-group-id="4759017520-11">}</span><span class="p" data-group-id="4759017520-10">]</span><span class="p" data-group-id="4759017520-9">)</span><span class="w">
+  </span><span class="k" data-group-id="4759017520-3">end</span><span class="w">
+
+  </span><span class="kd">defp</span><span class="w"> </span><span class="nf">message_type</span><span class="p" data-group-id="4759017520-12">(</span><span class="p" data-group-id="4759017520-13">%</span><span class="nc" data-group-id="4759017520-13">Vsr.Message.Prepare</span><span class="p" data-group-id="4759017520-13">{</span><span class="p" data-group-id="4759017520-13">}</span><span class="p" data-group-id="4759017520-12">)</span><span class="p">,</span><span class="w"> </span><span class="ss">do</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;prepare&quot;</span><span class="w">
+  </span><span class="kd">defp</span><span class="w"> </span><span class="nf">message_type</span><span class="p" data-group-id="4759017520-14">(</span><span class="p" data-group-id="4759017520-15">%</span><span class="nc" data-group-id="4759017520-15">Vsr.Message.PrepareOk</span><span class="p" data-group-id="4759017520-15">{</span><span class="p" data-group-id="4759017520-15">}</span><span class="p" data-group-id="4759017520-14">)</span><span class="p">,</span><span class="w"> </span><span class="ss">do</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;prepare_ok&quot;</span><span class="w">
+  </span><span class="kd">defp</span><span class="w"> </span><span class="nf">message_type</span><span class="p" data-group-id="4759017520-16">(</span><span class="p" data-group-id="4759017520-17">%</span><span class="nc" data-group-id="4759017520-17">Vsr.Message.Commit</span><span class="p" data-group-id="4759017520-17">{</span><span class="p" data-group-id="4759017520-17">}</span><span class="p" data-group-id="4759017520-16">)</span><span class="p">,</span><span class="w"> </span><span class="ss">do</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;commit&quot;</span><span class="w">
+  </span><span class="c1"># ... other message types</span><span class="w">
+
+  </span><span class="kd">defp</span><span class="w"> </span><span class="nf">serialize_message</span><span class="p" data-group-id="4759017520-18">(</span><span class="p" data-group-id="4759017520-19">%</span><span class="nc" data-group-id="4759017520-19">Vsr.Message.Prepare</span><span class="p" data-group-id="4759017520-19">{</span><span class="p" data-group-id="4759017520-19">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">msg</span><span class="p" data-group-id="4759017520-18">)</span><span class="w"> </span><span class="k" data-group-id="4759017520-20">do</span><span class="w">
+    </span><span class="p" data-group-id="4759017520-21">%{</span><span class="w">
+      </span><span class="s">&quot;op_number&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">msg</span><span class="o">.</span><span class="n">op_number</span><span class="p">,</span><span class="w">
+      </span><span class="s">&quot;operation&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">msg</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span><span class="w">
+      </span><span class="s">&quot;commit_number&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">msg</span><span class="o">.</span><span class="n">commit_number</span><span class="p">,</span><span class="w">
+      </span><span class="s">&quot;leader_id&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">msg</span><span class="o">.</span><span class="n">leader_id</span><span class="w">
+    </span><span class="p" data-group-id="4759017520-21">}</span><span class="w">
+  </span><span class="k" data-group-id="4759017520-20">end</span><span class="w">
+  </span><span class="c1"># ... other serializers</span><span class="w">
+
+  </span><span class="c1"># ... other callbacks</span><span class="w">
+</span><span class="k" data-group-id="4759017520-1">end</span></code></pre><p>When receiving messages via your custom transport, deserialize and deliver to VsrServer:</p><pre><code class="makeup elixir" translate="no"><span class="kd">defmodule</span><span class="w"> </span><span class="nc">MyHttpHandler</span><span class="w"> </span><span class="k" data-group-id="2714434867-1">do</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">handle_vsr_request</span><span class="p" data-group-id="2714434867-2">(</span><span class="n">conn</span><span class="p" data-group-id="2714434867-2">)</span><span class="w"> </span><span class="k" data-group-id="2714434867-3">do</span><span class="w">
+    </span><span class="c1"># Deserialize from JSON</span><span class="w">
+    </span><span class="p" data-group-id="2714434867-4">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">json</span><span class="p" data-group-id="2714434867-4">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Jason</span><span class="o">.</span><span class="n">decode</span><span class="p" data-group-id="2714434867-5">(</span><span class="n">conn</span><span class="o">.</span><span class="n">body_params</span><span class="p" data-group-id="2714434867-5">)</span><span class="w">
+    </span><span class="n">vsr_message</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deserialize_vsr_message</span><span class="p" data-group-id="2714434867-6">(</span><span class="n">json</span><span class="p" data-group-id="2714434867-6">)</span><span class="w">
+
+    </span><span class="c1"># Deliver to local VsrServer</span><span class="w">
+    </span><span class="nc">VsrServer</span><span class="o">.</span><span class="n">vsr_send</span><span class="p" data-group-id="2714434867-7">(</span><span class="n">conn</span><span class="o">.</span><span class="n">assigns</span><span class="o">.</span><span class="n">vsr_server</span><span class="p">,</span><span class="w"> </span><span class="n">vsr_message</span><span class="p" data-group-id="2714434867-7">)</span><span class="w">
+
+    </span><span class="c1"># Send HTTP response</span><span class="w">
+    </span><span class="n">send_resp</span><span class="p" data-group-id="2714434867-8">(</span><span class="n">conn</span><span class="p">,</span><span class="w"> </span><span class="mi">200</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ok&quot;</span><span class="p" data-group-id="2714434867-8">)</span><span class="w">
+  </span><span class="k" data-group-id="2714434867-3">end</span><span class="w">
+
+  </span><span class="kd">defp</span><span class="w"> </span><span class="nf">deserialize_vsr_message</span><span class="p" data-group-id="2714434867-9">(</span><span class="p" data-group-id="2714434867-10">%{</span><span class="s">&quot;type&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;prepare&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;data&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">data</span><span class="p" data-group-id="2714434867-10">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">json</span><span class="p" data-group-id="2714434867-9">)</span><span class="w"> </span><span class="k" data-group-id="2714434867-11">do</span><span class="w">
+    </span><span class="p" data-group-id="2714434867-12">%</span><span class="nc" data-group-id="2714434867-12">Vsr.Message.Prepare</span><span class="p" data-group-id="2714434867-12">{</span><span class="w">
+      </span><span class="ss">view</span><span class="p">:</span><span class="w"> </span><span class="n">json</span><span class="p" data-group-id="2714434867-13">[</span><span class="s">&quot;view&quot;</span><span class="p" data-group-id="2714434867-13">]</span><span class="p">,</span><span class="w">
+      </span><span class="ss">op_number</span><span class="p">:</span><span class="w"> </span><span class="n">data</span><span class="p" data-group-id="2714434867-14">[</span><span class="s">&quot;op_number&quot;</span><span class="p" data-group-id="2714434867-14">]</span><span class="p">,</span><span class="w">
+      </span><span class="ss">operation</span><span class="p">:</span><span class="w"> </span><span class="n">data</span><span class="p" data-group-id="2714434867-15">[</span><span class="s">&quot;operation&quot;</span><span class="p" data-group-id="2714434867-15">]</span><span class="p">,</span><span class="w">
+      </span><span class="ss">commit_number</span><span class="p">:</span><span class="w"> </span><span class="n">data</span><span class="p" data-group-id="2714434867-16">[</span><span class="s">&quot;commit_number&quot;</span><span class="p" data-group-id="2714434867-16">]</span><span class="p">,</span><span class="w">
+      </span><span class="ss">leader_id</span><span class="p">:</span><span class="w"> </span><span class="n">data</span><span class="p" data-group-id="2714434867-17">[</span><span class="s">&quot;leader_id&quot;</span><span class="p" data-group-id="2714434867-17">]</span><span class="w">
+    </span><span class="p" data-group-id="2714434867-12">}</span><span class="w">
+  </span><span class="k" data-group-id="2714434867-11">end</span><span class="w">
+
+  </span><span class="c1"># ... deserialize other message types</span><span class="w">
+</span><span class="k" data-group-id="2714434867-1">end</span></code></pre><p>The key insight is that <code class="inline">send_vsr/3</code> only handles <strong>outgoing</strong> messages.
+<strong>Incoming</strong> messages are delivered via <a href="#vsr_send/2"><code class="inline">VsrServer.vsr_send/2</code></a> after your
+custom transport receives and deserializes them.</p><h2 id="module-client-request-handling" class="section-heading"><a href="#module-client-request-handling" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Client Request Handling</span></h2><p>For client requests, use the <code class="inline">send_reply/3</code> callback to reply back to clients:</p><pre><code class="makeup elixir" translate="no"><span class="na">@impl</span><span class="w"> </span><span class="nc">VsrServer</span><span class="w">
+</span><span class="kd">def</span><span class="w"> </span><span class="nf">send_reply</span><span class="p" data-group-id="0524154102-1">(</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">reply</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p" data-group-id="0524154102-1">)</span><span class="w"> </span><span class="k" data-group-id="0524154102-2">do</span><span class="w">
+  </span><span class="k">case</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="k" data-group-id="0524154102-3">do</span><span class="w">
+    </span><span class="c1"># Standard GenServer from tuple (Erlang distribution)</span><span class="w">
+    </span><span class="p" data-group-id="0524154102-4">{</span><span class="n">pid</span><span class="p">,</span><span class="w"> </span><span class="n">ref</span><span class="p" data-group-id="0524154102-4">}</span><span class="w"> </span><span class="ow">when</span><span class="w"> </span><span class="n">is_pid</span><span class="p" data-group-id="0524154102-5">(</span><span class="n">pid</span><span class="p" data-group-id="0524154102-5">)</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="n">is_reference</span><span class="p" data-group-id="0524154102-6">(</span><span class="n">ref</span><span class="p" data-group-id="0524154102-6">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+      </span><span class="nc">GenServer</span><span class="o">.</span><span class="n">reply</span><span class="p" data-group-id="0524154102-7">(</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">reply</span><span class="p" data-group-id="0524154102-7">)</span><span class="w">
+
+    </span><span class="c1"># Custom from (e.g., HTTP request context)</span><span class="w">
+    </span><span class="p" data-group-id="0524154102-8">%{</span><span class="ss">conn</span><span class="p">:</span><span class="w"> </span><span class="n">conn</span><span class="p">,</span><span class="w"> </span><span class="ss">request_id</span><span class="p">:</span><span class="w"> </span><span class="n">req_id</span><span class="p" data-group-id="0524154102-8">}</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+      </span><span class="n">send_http_response</span><span class="p" data-group-id="0524154102-9">(</span><span class="n">conn</span><span class="p">,</span><span class="w"> </span><span class="n">req_id</span><span class="p">,</span><span class="w"> </span><span class="n">reply</span><span class="p" data-group-id="0524154102-9">)</span><span class="w">
+
+    </span><span class="c1"># JSON-RPC from</span><span class="w">
+    </span><span class="p" data-group-id="0524154102-10">%{</span><span class="s">&quot;node&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">node_id</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;from&quot;</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">client_ref</span><span class="p" data-group-id="0524154102-10">}</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+      </span><span class="n">send_json_rpc_reply</span><span class="p" data-group-id="0524154102-11">(</span><span class="n">node_id</span><span class="p">,</span><span class="w"> </span><span class="n">client_ref</span><span class="p">,</span><span class="w"> </span><span class="n">reply</span><span class="p" data-group-id="0524154102-11">)</span><span class="w">
+  </span><span class="k" data-group-id="0524154102-3">end</span><span class="w">
+</span><span class="k" data-group-id="0524154102-2">end</span></code></pre><h2 id="module-client-request-deduplication" class="section-heading"><a href="#module-client-request-deduplication" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Client Request Deduplication</span></h2><p>VsrServer provides automatic deduplication for client requests using
+<code class="inline">client_id</code> and <code class="inline">request_id</code>:</p><pre><code class="makeup elixir" translate="no"><span class="c1"># In your client API</span><span class="w">
+</span><span class="kd">def</span><span class="w"> </span><span class="nf">write</span><span class="p" data-group-id="6570221936-1">(</span><span class="n">vsr_pid</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p" data-group-id="6570221936-1">)</span><span class="w"> </span><span class="k" data-group-id="6570221936-2">do</span><span class="w">
+  </span><span class="n">client_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ss">:my_client_1</span><span class="w">
+  </span><span class="n">request_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">System</span><span class="o">.</span><span class="n">unique_integer</span><span class="p" data-group-id="6570221936-3">(</span><span class="p" data-group-id="6570221936-4">[</span><span class="ss">:positive</span><span class="p" data-group-id="6570221936-4">]</span><span class="p" data-group-id="6570221936-3">)</span><span class="w">
+
+  </span><span class="nc">VsrServer</span><span class="o">.</span><span class="n">client_request</span><span class="p" data-group-id="6570221936-5">(</span><span class="n">vsr_pid</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="6570221936-6">{</span><span class="ss">:write</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p" data-group-id="6570221936-6">}</span><span class="p">,</span><span class="w">
+    </span><span class="ss">client_id</span><span class="p">:</span><span class="w"> </span><span class="n">client_id</span><span class="p">,</span><span class="w">
+    </span><span class="ss">request_id</span><span class="p">:</span><span class="w"> </span><span class="n">request_id</span><span class="w">
+  </span><span class="p" data-group-id="6570221936-5">)</span><span class="w">
+</span><span class="k" data-group-id="6570221936-2">end</span></code></pre><p>Multiple identical requests (same <code class="inline">client_id</code> and <code class="inline">request_id</code>) will:</p><ul><li>Be processed once</li><li>All waiting callers receive the same result</li><li>Prevent duplicate operations</li></ul><h2 id="module-configuration-options" class="section-heading"><a href="#module-configuration-options" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Configuration Options</span></h2><p>When starting VsrServer, you can configure:</p><pre><code class="makeup elixir" translate="no"><span class="nc">VsrServer</span><span class="o">.</span><span class="n">start_link</span><span class="p" data-group-id="0488822830-1">(</span><span class="nc">MyModule</span><span class="p">,</span><span class="w">
+  </span><span class="c1"># Required</span><span class="w">
+  </span><span class="ss">node_id</span><span class="p">:</span><span class="w"> </span><span class="ss">:node1</span><span class="p">,</span><span class="w">                    </span><span class="c1"># Unique identifier for this node</span><span class="w">
+  </span><span class="ss">cluster_size</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w">                     </span><span class="c1"># Total number of replicas</span><span class="w">
+
+  </span><span class="c1"># Optional</span><span class="w">
+  </span><span class="ss">replicas</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="0488822830-2">[</span><span class="ss">:node2</span><span class="p">,</span><span class="w"> </span><span class="ss">:node3</span><span class="p" data-group-id="0488822830-2">]</span><span class="p">,</span><span class="w">          </span><span class="c1"># Other replica node IDs (auto-computed if not provided)</span><span class="w">
+  </span><span class="ss">heartbeat_interval</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w">             </span><span class="c1"># Primary heartbeat interval (ms)</span><span class="w">
+  </span><span class="ss">heartbeat_timeout</span><span class="p">:</span><span class="w"> </span><span class="mi">500</span><span class="p">,</span><span class="w">              </span><span class="c1"># Backup timeout for primary failure (ms)</span><span class="w">
+  </span><span class="ss">name</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="0488822830-3">{</span><span class="ss">:global</span><span class="p">,</span><span class="w"> </span><span class="ss">:my_vsr_server</span><span class="p" data-group-id="0488822830-3">}</span><span class="w">      </span><span class="c1"># GenServer registration</span><span class="w">
+</span><span class="p" data-group-id="0488822830-1">)</span></code></pre><h2 id="module-complete-example-maelstrom-integration" class="section-heading"><a href="#module-complete-example-maelstrom-integration" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Complete Example: Maelstrom Integration</span></h2><p>See <code class="inline">maelstrom-adapter/</code> directory for a complete example of implementing
+VSR with a custom JSON-based protocol for Jepsen Maelstrom testing.</p><p>Key components:</p><ul><li><code class="inline">Maelstrom.Kv</code> - State machine implementation with custom <code class="inline">send_vsr/3</code></li><li><code class="inline">Maelstrom.Message</code> - JSON message serialization</li><li><code class="inline">Maelstrom.Stdio</code> - STDIN/STDOUT message handling</li></ul><p>This demonstrates a complete custom transport implementation without using
+Erlang distribution.</p><h2 id="module-telemetry-events" class="section-heading"><a href="#module-telemetry-events" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Telemetry Events</span></h2><p>VsrServer emits comprehensive telemetry events for monitoring and debugging.
+See <a href="Vsr.Telemetry.html"><code class="inline">Vsr.Telemetry</code></a> module documentation for complete event reference.</p><p>Example telemetry handler:</p><pre><code class="makeup elixir" translate="no"><span class="nc">:telemetry</span><span class="o">.</span><span class="n">attach_many</span><span class="p" data-group-id="6846654233-1">(</span><span class="w">
+  </span><span class="s">&quot;vsr-logger&quot;</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="6846654233-2">[</span><span class="w">
+    </span><span class="p" data-group-id="6846654233-3">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:state</span><span class="p">,</span><span class="w"> </span><span class="ss">:commit_advance</span><span class="p" data-group-id="6846654233-3">]</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="6846654233-4">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:view_change</span><span class="p">,</span><span class="w"> </span><span class="ss">:complete</span><span class="p" data-group-id="6846654233-4">]</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="6846654233-5">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:leadership</span><span class="p">,</span><span class="w"> </span><span class="ss">:start</span><span class="p" data-group-id="6846654233-5">]</span><span class="w">
+  </span><span class="p" data-group-id="6846654233-2">]</span><span class="p">,</span><span class="w">
+  </span><span class="o">&amp;</span><span class="n">handle_vsr_event</span><span class="o">/</span><span class="mi">4</span><span class="p">,</span><span class="w">
+  </span><span class="no">nil</span><span class="w">
+</span><span class="p" data-group-id="6846654233-1">)</span><span class="w">
+
+</span><span class="kd">def</span><span class="w"> </span><span class="nf">handle_vsr_event</span><span class="p" data-group-id="6846654233-6">(</span><span class="n">event_name</span><span class="p">,</span><span class="w"> </span><span class="n">measurements</span><span class="p">,</span><span class="w"> </span><span class="n">metadata</span><span class="p">,</span><span class="w"> </span><span class="c">_config</span><span class="p" data-group-id="6846654233-6">)</span><span class="w"> </span><span class="k" data-group-id="6846654233-7">do</span><span class="w">
+  </span><span class="nc">Logger</span><span class="o">.</span><span class="n">info</span><span class="p" data-group-id="6846654233-8">(</span><span class="s">&quot;VSR Event: </span><span class="si" data-group-id="6846654233-9">#{</span><span class="n">inspect</span><span class="p" data-group-id="6846654233-10">(</span><span class="n">event_name</span><span class="p" data-group-id="6846654233-10">)</span><span class="si" data-group-id="6846654233-9">}</span><span class="s">&quot;</span><span class="p" data-group-id="6846654233-8">)</span><span class="w">
+</span><span class="k" data-group-id="6846654233-7">end</span></code></pre><h2 id="module-error-handling" class="section-heading"><a href="#module-error-handling" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Error Handling</span></h2><p>VsrServer follows &quot;let it crash&quot; philosophy:</p><ul><li>Invalid messages crash the GenServer (supervised recovery)</li><li>Network failures are handled by retries/timeouts</li><li>State machine errors crash and require supervisor restart</li></ul><p>For graceful error handling in your state machine:</p><pre><code class="makeup elixir" translate="no"><span class="kd">def</span><span class="w"> </span><span class="nf">handle_commit</span><span class="p" data-group-id="6245339571-1">(</span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p" data-group-id="6245339571-1">)</span><span class="w"> </span><span class="k" data-group-id="6245339571-2">do</span><span class="w">
+  </span><span class="k">case</span><span class="w"> </span><span class="n">validate_operation</span><span class="p" data-group-id="6245339571-3">(</span><span class="n">operation</span><span class="p" data-group-id="6245339571-3">)</span><span class="w"> </span><span class="k" data-group-id="6245339571-4">do</span><span class="w">
+    </span><span class="ss">:ok</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+      </span><span class="c1"># Process operation</span><span class="w">
+      </span><span class="p" data-group-id="6245339571-5">{</span><span class="n">new_state</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="p" data-group-id="6245339571-5">}</span><span class="w">
+
+    </span><span class="p" data-group-id="6245339571-6">{</span><span class="ss">:error</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p" data-group-id="6245339571-6">}</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+      </span><span class="c1"># Return error result, state unchanged</span><span class="w">
+      </span><span class="p" data-group-id="6245339571-7">{</span><span class="n">state</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6245339571-8">{</span><span class="ss">:error</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p" data-group-id="6245339571-8">}</span><span class="p" data-group-id="6245339571-7">}</span><span class="w">
+  </span><span class="k" data-group-id="6245339571-4">end</span><span class="w">
+</span><span class="k" data-group-id="6245339571-2">end</span></code></pre><h2 id="module-testing" class="section-heading"><a href="#module-testing" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Testing</span></h2><p>For testing, you can use synchronous operations and inspect state:</p><pre><code class="makeup elixir" translate="no"><span class="n">test</span><span class="w"> </span><span class="s">&quot;writes are replicated&quot;</span><span class="w"> </span><span class="k" data-group-id="7900742970-1">do</span><span class="w">
+  </span><span class="p" data-group-id="7900742970-2">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">replica1</span><span class="p" data-group-id="7900742970-2">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">start_replica</span><span class="p" data-group-id="7900742970-3">(</span><span class="ss">:r1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="7900742970-3">)</span><span class="w">
+  </span><span class="p" data-group-id="7900742970-4">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">replica2</span><span class="p" data-group-id="7900742970-4">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">start_replica</span><span class="p" data-group-id="7900742970-5">(</span><span class="ss">:r2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="7900742970-5">)</span><span class="w">
+  </span><span class="p" data-group-id="7900742970-6">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">replica3</span><span class="p" data-group-id="7900742970-6">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">start_replica</span><span class="p" data-group-id="7900742970-7">(</span><span class="ss">:r3</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="7900742970-7">)</span><span class="w">
+
+  </span><span class="c1"># Perform operation</span><span class="w">
+  </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">VsrServer</span><span class="o">.</span><span class="n">client_request</span><span class="p" data-group-id="7900742970-8">(</span><span class="n">replica1</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="7900742970-9">{</span><span class="ss">:write</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;key&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;value&quot;</span><span class="p" data-group-id="7900742970-9">}</span><span class="p" data-group-id="7900742970-8">)</span><span class="w">
+  </span><span class="n">assert</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="ss">:ok</span><span class="w">
+
+  </span><span class="c1"># Check state is replicated</span><span class="w">
+  </span><span class="n">state1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">VsrServer</span><span class="o">.</span><span class="n">dump</span><span class="p" data-group-id="7900742970-10">(</span><span class="n">replica1</span><span class="p" data-group-id="7900742970-10">)</span><span class="w">
+  </span><span class="n">state2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">VsrServer</span><span class="o">.</span><span class="n">dump</span><span class="p" data-group-id="7900742970-11">(</span><span class="n">replica2</span><span class="p" data-group-id="7900742970-11">)</span><span class="w">
+
+  </span><span class="n">assert</span><span class="w"> </span><span class="n">state1</span><span class="o">.</span><span class="n">inner</span><span class="o">.</span><span class="n">data</span><span class="p" data-group-id="7900742970-12">[</span><span class="s">&quot;key&quot;</span><span class="p" data-group-id="7900742970-12">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s">&quot;value&quot;</span><span class="w">
+  </span><span class="n">assert</span><span class="w"> </span><span class="n">state2</span><span class="o">.</span><span class="n">inner</span><span class="o">.</span><span class="n">data</span><span class="p" data-group-id="7900742970-13">[</span><span class="s">&quot;key&quot;</span><span class="p" data-group-id="7900742970-13">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s">&quot;value&quot;</span><span class="w">
+</span><span class="k" data-group-id="7900742970-1">end</span></code></pre>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-types summary">
+  <h2>
+    <a href="#types">Types</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:client_request/0" data-no-tooltip="" translate="no">client_request()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>A client request that expects a reply.  The <code class="inline">from</code> parameter is typically a <code class="inline">GenServer.from()</code> term,
+if the cluster communicates using Erlang distribution.  If it does not, you may encode the <code class="inline">from</code>
+parameter in a way that is appropriate for the communication protocol used by the cluster.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:client_request_noreply/0" data-no-tooltip="" translate="no">client_request_noreply()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>A client request that does not expect a reply.  This should be used sparingly, typically, it is
+better to produce a synchronous reply, even if the response is just an <code class="inline">:ok</code> acknowledgement.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:node_id/0" data-no-tooltip="" translate="no">node_id()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:server/0" data-no-tooltip="" translate="no">server()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:state/0" data-no-tooltip="" translate="no">state()</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-callbacks summary">
+  <h2>
+    <a href="#callbacks">Callbacks</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:code_change/3" data-no-tooltip="" translate="no">code_change(old_vsn, state, extra)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked to change the state of the <a><code class="inline">VsrServer</code></a> when a different version of a
+module is loaded (hot code swapping) and the state's term structure should be
+changed.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:handle_call/3" data-no-tooltip="" translate="no">handle_call(request, from, state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked to handle synchronous <code class="inline">call/3</code> messages.  Generally, initiating operations
+on the state machine that VSR wraps should be done through this callback.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:handle_cast/2" data-no-tooltip="" translate="no">handle_cast(request, state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked to handle asynchronous <code class="inline">cast/2</code> messages.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:handle_commit/2" data-no-tooltip="" translate="no">handle_commit(operation, inner_state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked when a VSR operation is committed and needs to be applied to the state machine.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:handle_continue/2" data-no-tooltip="" translate="no">handle_continue(continue_arg, state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked to handle continue instructions.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:handle_info/2" data-no-tooltip="" translate="no">handle_info(msg, state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked to handle all other messages.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:init/1" data-no-tooltip="" translate="no">init(init_arg)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked when the server is started. <code class="inline">start_link/3</code> or <code class="inline">start/3</code> will
+block until it returns.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_append/2" data-no-tooltip="" translate="no">log_append(log, entry)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Appends an entry to the VSR log.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_clear/1" data-no-tooltip="" translate="no">log_clear(log)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Clears all entries from the VSR log.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_fetch/2" data-no-tooltip="" translate="no">log_fetch(log, op_number)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Fetches an entry from the VSR log by operation number.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_get_all/1" data-no-tooltip="" translate="no">log_get_all(log)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Gets all entries from the VSR log.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_get_from/2" data-no-tooltip="" translate="no">log_get_from(log, op_number)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Gets entries from the specified operation number onwards.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_length/1" data-no-tooltip="" translate="no">log_length(log)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Gets the current length (number of entries) in the VSR log.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:log_replace/2" data-no-tooltip="" translate="no">log_replace(log, entries)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Replaces the entire VSR log with new entries.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:monitor_node/3" data-no-tooltip="" translate="no">monitor_node(node_id, message, inner_state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Monitors another node in the cluster for failure detection.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:send_reply/3" data-no-tooltip="" translate="no">send_reply(from, reply, inner_state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Sends a reply to a client.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:send_vsr/3" data-no-tooltip="" translate="no">send_vsr(node_id, message, inner_state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Sends a VSR message to another node in the cluster.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:terminate/2" data-no-tooltip="" translate="no">terminate(reason, state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Invoked when the server is about to exit. It should do any cleanup required.</p></div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#child_spec/1" data-no-tooltip="" translate="no">child_spec(init_arg)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Returns a specification to start this module under a supervisor.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#dump/1" data-no-tooltip="" translate="no">dump(server)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Dumps the internal state of a VSR server for testing and debugging.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#node_id/1" data-no-tooltip="" translate="no">node_id(server \\ self())</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Gets the node_id of a VSR server.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#set_cluster/4" data-no-tooltip="" translate="no">set_cluster(server, node_id, replicas, cluster_size \\ nil)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>In the case that the cluster cannot be known at boot time, this function may be used to set cluster details.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#set_log/2" data-no-tooltip="" translate="no">set_log(server, log)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>In the case that the log cannot be known at boot time (for example, some parameter in the log setup depends
+on the cluster configuration), this function may be used to set the log.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#set_log_impl/2" data-no-tooltip="" translate="no">set_log_impl(log, state)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_link/2" data-no-tooltip="" translate="no">start_link(module, opts)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#vsr_send/2" data-no-tooltip="" translate="no">vsr_send(server, message)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>In certain situations, you may need to send VSR messages <em>out-of-band</em> from the normal erlang distribution
+mechanism that VsrServer relies on by default.  In this case you may use this function to send VSR messages
+to VSR servers.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h1>
+
+    <div class="types-list">
+<section class="detail" id="t:client_request/0">
+
+  <div class="detail-header">
+    <a href="#t:client_request/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">client_request()</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L521" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> client_request() ::
+  <a href="#t:client_request_noreply/0">client_request_noreply</a>() | {:client_request, from :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>A client request that expects a reply.  The <code class="inline">from</code> parameter is typically a <code class="inline">GenServer.from()</code> term,
+if the cluster communicates using Erlang distribution.  If it does not, you may encode the <code class="inline">from</code>
+parameter in a way that is appropriate for the communication protocol used by the cluster.</p>
+  </section>
+</section>
+<section class="detail" id="t:client_request_noreply/0">
+
+  <div class="detail-header">
+    <a href="#t:client_request_noreply/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">client_request_noreply()</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L515" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> client_request_noreply() :: {:client_request, <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>A client request that does not expect a reply.  This should be used sparingly, typically, it is
+better to produce a synchronous reply, even if the response is just an <code class="inline">:ok</code> acknowledgement.</p>
+  </section>
+</section>
+<section class="detail" id="t:node_id/0">
+
+  <div class="detail-header">
+    <a href="#t:node_id/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">node_id()</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L752" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> node_id() :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:server/0">
+
+  <div class="detail-header">
+    <a href="#t:server/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">server()</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L847" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> server() :: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">pid</a>() | <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">atom</a>()</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:state/0">
+
+  <div class="detail-header">
+    <a href="#t:state/0" class="detail-link" data-no-tooltip="" aria-label="Link to this opaque">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">state()</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L761" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@opaque</span> state()</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="callbacks" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#callbacks">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Callbacks</span>
+    </h1>
+
+    <div class="callbacks-list">
+<section class="detail" id="c:code_change/3">
+
+  <div class="detail-header">
+    <a href="#c:code_change/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">code_change(old_vsn, state, extra)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L634" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> code_change(old_vsn, state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), extra :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {:ok, new_state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()} | {:error, reason :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}
+when old_vsn: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>() | {:down, <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>Invoked to change the state of the <a href="VsrServer.html"><code class="inline">VsrServer</code></a> when a different version of a
+module is loaded (hot code swapping) and the state's term structure should be
+changed.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:code_change/3"><code class="inline">GenServer.code_change/3</code></a> for general information about this callback.</p><p>This callback is optional.</p>
+  </section>
+</section>
+<section class="detail" id="c:handle_call/3">
+
+  <div class="detail-header">
+    <a href="#c:handle_call/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_call(request, from, state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L552" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> handle_call(request :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), <a href="https://hexdocs.pm/elixir/GenServer.html#t:from/0">GenServer.from</a>(), state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {:reply, reply, new_state}
+  | {:reply, reply, new_state,
+     <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>()
+     | :hibernate
+     | {:continue, continue_arg :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}
+     | <a href="#t:client_request_noreply/0">client_request_noreply</a>()}
+  | {:noreply, new_state}
+  | {:noreply, new_state,
+     <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>()
+     | :hibernate
+     | {:continue, continue_arg :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}
+     | <a href="#t:client_request/0">client_request</a>()}
+  | {:stop, reason, reply, new_state}
+  | {:stop, reason, new_state}
+when reply: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), new_state: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), reason: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Invoked to handle synchronous <code class="inline">call/3</code> messages.  Generally, initiating operations
+on the state machine that VSR wraps should be done through this callback.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:handle_call/3"><code class="inline">GenServer.handle_call/3</code></a> for general information about this callback.</p><p>To initiate a VSR request, use the <code class="inline">:client_request</code> tuple.</p>
+  </section>
+</section>
+<section class="detail" id="c:handle_cast/2">
+
+  <div class="detail-header">
+    <a href="#c:handle_cast/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_cast(request, state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L574" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> handle_cast(request :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {:noreply, new_state}
+  | {:noreply, new_state,
+     <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>()
+     | :hibernate
+     | {:continue, continue_arg :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}
+     | <a href="#t:client_request/0">client_request</a>()}
+  | {:stop, reason :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), new_state}
+when new_state: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Invoked to handle asynchronous <code class="inline">cast/2</code> messages.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:handle_cast/2"><code class="inline">GenServer.handle_cast/2</code></a> for general information about this callback.</p><p>To initiate a VSR request, pass the <code class="inline">:client_request</code> tuple.  You may use a <code class="inline">from</code> argument
+in the tuple that has been created by a previous call and stored in the server state.</p><p>This callback is optional. If one is not implemented, the server will fail
+if a cast is performed against it.</p>
+  </section>
+</section>
+<section class="detail" id="c:handle_commit/2">
+
+  <div class="detail-header">
+    <a href="#c:handle_commit/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_commit(operation, inner_state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L646" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> handle_commit(operation :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), inner_state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {new_inner_state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), result :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>Invoked when a VSR operation is committed and needs to be applied to the state machine.</p><p>This callback receives the operation that was committed, the current inner state,
+and the full VSR state. It should apply the operation and return the new inner state
+and any result value to be sent back to the client.</p>
+  </section>
+</section>
+<section class="detail" id="c:handle_continue/2">
+
+  <div class="detail-header">
+    <a href="#c:handle_continue/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_continue(continue_arg, state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L608" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> handle_continue(continue_arg, state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {:noreply, new_state}
+  | {:noreply, new_state,
+     <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>() | :hibernate | {:continue, continue_arg} | <a href="#t:client_request/0">client_request</a>()}
+  | {:stop, reason :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), new_state}
+when new_state: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), continue_arg: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Invoked to handle continue instructions.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:handle_info/2"><code class="inline">GenServer.handle_info/2</code></a> for general information about this callback.</p><p>Return values are the same as <a href="#c:handle_cast/2"><code class="inline">handle_cast/2</code></a>.</p><p>This callback is optional. If one is not implemented, the server will fail
+if a continue instruction is used.</p>
+  </section>
+</section>
+<section class="detail" id="c:handle_info/2">
+
+  <div class="detail-header">
+    <a href="#c:handle_info/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_info(msg, state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L591" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> handle_info(msg :: :timeout | <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {:noreply, new_state}
+  | {:noreply, new_state,
+     <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>()
+     | :hibernate
+     | {:continue, continue_arg :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}
+     | <a href="#t:client_request/0">client_request</a>()}
+  | {:stop, reason :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), new_state}
+when new_state: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Invoked to handle all other messages.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:handle_info/2"><code class="inline">GenServer.handle_info/2</code></a> for general information about this callback.</p><p>Return values are the same as <a href="#c:handle_cast/2"><code class="inline">handle_cast/2</code></a>.</p><p>This callback is optional. If one is not implemented, the received message
+will be logged.</p>
+  </section>
+</section>
+<section class="detail" id="c:init/1">
+
+  <div class="detail-header">
+    <a href="#c:init/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">init(init_arg)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L536" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> init(init_arg :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  {:ok, state}
+  | {:ok, log, state}
+  | {:ok, log, state,
+     <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>() | :hibernate | {:continue, continue_arg :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}}
+  | :ignore
+  | {:stop, reason :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}
+when state: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), log: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Invoked when the server is started. <code class="inline">start_link/3</code> or <code class="inline">start/3</code> will
+block until it returns.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:init/1"><code class="inline">GenServer.init/1</code></a> for general information about the <code class="inline">init/1</code> callback.</p><p>The <a href="VsrServer.html"><code class="inline">VsrServer</code></a> init callback adds an additional <code class="inline">log</code> term in the success tuple,
+which initializes the VSR log,  This should be a durable, local store for logging
+VSR operations.</p><p>If the log must be initialized at a later stage (for example, via an out-of band
+initialization, then you may return the normal {:ok, state} term)</p>
+  </section>
+</section>
+<section class="detail" id="c:log_append/2">
+
+  <div class="detail-header">
+    <a href="#c:log_append/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_append(log, entry)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L670" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_append(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), entry :: <a href="Vsr.LogEntry.html#t:t/0">Vsr.LogEntry.t</a>()) :: new_log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Appends an entry to the VSR log.</p><p>Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:log_clear/1">
+
+  <div class="detail-header">
+    <a href="#c:log_clear/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_clear(log)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L714" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_clear(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: new_log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Clears all entries from the VSR log.</p><p>Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:log_fetch/2">
+
+  <div class="detail-header">
+    <a href="#c:log_fetch/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_fetch(log, op_number)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L677" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_fetch(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), op_number :: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">non_neg_integer</a>()) ::
+  {:ok, <a href="Vsr.LogEntry.html#t:t/0">Vsr.LogEntry.t</a>()} | {:error, :not_found}</pre>
+
+      </div>
+
+<p>Fetches an entry from the VSR log by operation number.</p><p>Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:log_get_all/1">
+
+  <div class="detail-header">
+    <a href="#c:log_get_all/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_get_all(log)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L685" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_get_all(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: [<a href="Vsr.LogEntry.html#t:t/0">Vsr.LogEntry.t</a>()]</pre>
+
+      </div>
+
+<p>Gets all entries from the VSR log.</p><p>Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:log_get_from/2">
+
+  <div class="detail-header">
+    <a href="#c:log_get_from/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_get_from(log, op_number)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L692" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_get_from(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), op_number :: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">non_neg_integer</a>()) :: [
+  <a href="Vsr.LogEntry.html#t:t/0">Vsr.LogEntry.t</a>()
+]</pre>
+
+      </div>
+
+<p>Gets entries from the specified operation number onwards.</p><p>Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:log_length/1">
+
+  <div class="detail-header">
+    <a href="#c:log_length/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_length(log)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L699" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_length(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">non_neg_integer</a>()</pre>
+
+      </div>
+
+<p>Gets the current length (number of entries) in the VSR log.</p><p>Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:log_replace/2">
+
+  <div class="detail-header">
+    <a href="#c:log_replace/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">log_replace(log, entries)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L707" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> log_replace(log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), entries :: [<a href="Vsr.LogEntry.html#t:t/0">Vsr.LogEntry.t</a>()]) :: new_log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Replaces the entire VSR log with new entries.</p><p>Used during state transfer and view changes.
+Required callback - must be implemented by all VSR modules.</p>
+  </section>
+</section>
+<section class="detail" id="c:monitor_node/3">
+
+  <div class="detail-header">
+    <a href="#c:monitor_node/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">monitor_node(node_id, message, inner_state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L663" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> monitor_node(node_id :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), message :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), inner_state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) ::
+  <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">reference</a>()</pre>
+
+      </div>
+
+<p>Monitors another node in the cluster for failure detection.</p><p>The default implementation uses <a href="https://hexdocs.pm/elixir/Process.html#monitor/1"><code class="inline">Process.monitor/1</code></a> for PID-based node identifiers.
+Override this for custom monitoring mechanisms.</p>
+  </section>
+</section>
+<section class="detail" id="c:send_reply/3">
+
+  <div class="detail-header">
+    <a href="#c:send_reply/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">send_reply(from, reply, inner_state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L723" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> send_reply(from :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), reply :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), inner_state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Sends a reply to a client.</p><p>The default implementation uses <a href="https://hexdocs.pm/elixir/GenServer.html#reply/2"><code class="inline">GenServer.reply/2</code></a> for standard Erlang distribution.
+Override this for custom communication protocols where the <code class="inline">from</code> parameter
+needs to be handled differently (e.g., encoded node references, message passing).</p>
+  </section>
+</section>
+<section class="detail" id="c:send_vsr/3">
+
+  <div class="detail-header">
+    <a href="#c:send_vsr/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">send_vsr(node_id, message, inner_state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L655" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> send_vsr(node_id :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), message :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>(), inner_state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Sends a VSR message to another node in the cluster.</p><p>The default implementation uses PIDs as node identifiers and sends via raw <a href="https://hexdocs.pm/elixir/Kernel.html#send/2"><code class="inline">send/2</code></a>.
+Override this for custom communication protocols (e.g., Maelstrom, network protocols).</p>
+  </section>
+</section>
+<section class="detail" id="c:terminate/2">
+
+  <div class="detail-header">
+    <a href="#c:terminate/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">terminate(reason, state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L622" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@callback</span> terminate(reason, state :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()
+when reason: :normal | :shutdown | {:shutdown, <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()} | <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Invoked when the server is about to exit. It should do any cleanup required.</p><p>See <a href="https://hexdocs.pm/elixir/GenServer.html#c:terminate/2"><code class="inline">GenServer.terminate/2</code></a> for general information about this callback.</p><p>This callback is optional.</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+
+    <div class="functions-list">
+<section class="detail" id="child_spec/1">
+
+  <div class="detail-header">
+    <a href="#child_spec/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">child_spec(init_arg)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L358" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+<p>Returns a specification to start this module under a supervisor.</p><p>See <a href="https://hexdocs.pm/elixir/Supervisor.html"><code class="inline">Supervisor</code></a>.</p>
+  </section>
+</section>
+<section class="detail" id="dump/1">
+
+  <div class="detail-header">
+    <a href="#dump/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">dump(server)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L929" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> dump(<a href="#t:server/0">server</a>()) :: <a href="#t:state/0">state</a>()</pre>
+
+      </div>
+
+<p>Dumps the internal state of a VSR server for testing and debugging.</p>
+  </section>
+</section>
+<section class="detail" id="node_id/1">
+
+  <div class="detail-header">
+    <a href="#node_id/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">node_id(server \\ self())</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L908" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+<p>Gets the node_id of a VSR server.</p>
+  </section>
+</section>
+<section class="detail" id="set_cluster/4">
+
+    <span id="set_cluster/3"></span>
+
+  <div class="detail-header">
+    <a href="#set_cluster/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">set_cluster(server, node_id, replicas, cluster_size \\ nil)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L865" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> set_cluster(
+  <a href="#t:server/0">server</a>(),
+  node_id,
+  replicas :: <a href="https://hexdocs.pm/elixir/Enumerable.html#t:t/1">Enumerable.t</a>(node_id),
+  cluster_size :: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">non_neg_integer</a>() | nil
+) :: :ok
+when node_id: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>In the case that the cluster cannot be known at boot time, this function may be used to set cluster details.</p>
+  </section>
+</section>
+<section class="detail" id="set_log/2">
+
+  <div class="detail-header">
+    <a href="#set_log/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">set_log(server, log)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L875" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> set_log(<a href="#t:server/0">server</a>(), log :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: :ok</pre>
+
+      </div>
+
+<p>In the case that the log cannot be known at boot time (for example, some parameter in the log setup depends
+on the cluster configuration), this function may be used to set the log.</p>
+  </section>
+</section>
+<section class="detail" id="set_log_impl/2">
+
+  <div class="detail-header">
+    <a href="#set_log_impl/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">set_log_impl(log, state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L877" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_link/2">
+
+  <div class="detail-header">
+    <a href="#start_link/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_link(module, opts)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L786" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="vsr_send/2">
+
+  <div class="detail-header">
+    <a href="#vsr_send/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">vsr_send(server, message)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr_server.ex#L924" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> vsr_send(<a href="#t:server/0">server</a>(), message :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()) :: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>In certain situations, you may need to send VSR messages <em>out-of-band</em> from the normal erlang distribution
+mechanism that VsrServer relies on by default.  In this case you may use this function to send VSR messages
+to VSR servers.</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/vsr/0.1.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/vsr/0.1.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="vsr.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

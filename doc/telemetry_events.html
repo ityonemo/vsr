@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="vsr v0.1.0">
+
+
+    <title>Telemetry Events — vsr v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-ZFNMEJKT.css" />
+
+    <script defer src="dist/sidebar_items-6AC56441.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="https://github.com/ityonemo/vsr" class="sidebar-projectName" translate="no">
+vsr
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of vsr</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Telemetry Events</h1>
+
+
+      <a href="https://github.com/ityonemo/vsr/blob/main/TELEMETRY_EVENTS.md#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+<p>VSR emits comprehensive telemetry events following Erlang/Elixir telemetry conventions. All events are prefixed with <code class="inline">[:vsr]</code>.</p><h2 id="event-categories" class="section-heading"><a href="#event-categories" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Event Categories</span></h2><ul><li><a href="#leadership-span">Leadership Span</a></li><li><a href="#protocol-events">Protocol Events</a></li><li><a href="#state-changes">State Changes</a></li><li><a href="#view-changes">View Changes</a></li><li><a href="#state-machine-operations">State Machine Operations</a></li><li><a href="#timer-events">Timer Events</a></li></ul><hr class="thin"/><h2 id="leadership-span" class="section-heading"><a href="#leadership-span" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Leadership Span</span></h2><p>Tracks when a node is the primary/leader in the VSR cluster.</p><h3 id="vsr-leadership-start" class="section-heading"><a href="#vsr-leadership-start" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :leadership, :start]</code></span></h3><p>Emitted when a node becomes the primary.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">system_time</code> - System time when leadership started</li><li><code class="inline">monotonic_time</code> - Monotonic time when leadership started</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">telemetry_span_context</code> - Unique reference for correlating start/stop events</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><p><strong>When emitted:</strong></p><ul><li>During initial startup if the node is primary for view 0</li><li>After completing a view change when becoming the new primary</li></ul><h3 id="vsr-leadership-stop" class="section-heading"><a href="#vsr-leadership-stop" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :leadership, :stop]</code></span></h3><p>Emitted when a node loses leadership.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">monotonic_time</code> - Monotonic time when leadership ended</li><li><code class="inline">duration</code> - Duration of leadership (currently 0, to be calculated in future versions)</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">telemetry_span_context</code> - Same reference from the corresponding <code class="inline">:start</code> event</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - View number when leadership was lost</li><li><code class="inline">status</code> - Node status when leadership was lost</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Operation number when leadership was lost</li><li><code class="inline">commit_number</code> - Commit number when leadership was lost</li></ul><p><strong>When emitted:</strong></p><ul><li>During view changes when transitioning from primary to backup</li></ul><hr class="thin"/><h2 id="protocol-events" class="section-heading"><a href="#protocol-events" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Protocol Events</span></h2><h3 id="vsr-protocol-client_request-start" class="section-heading"><a href="#vsr-protocol-client_request-start" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :client_request, :start]</code></span></h3><p>Emitted when a primary node starts processing a client request.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">operation</code> - String representation of the operation</li><li><code class="inline">client_id</code> - Client identifier (if provided for deduplication)</li><li><code class="inline">request_id</code> - Request identifier (if provided for deduplication)</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-protocol-prepare-sent" class="section-heading"><a href="#vsr-protocol-prepare-sent" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :prepare, :sent]</code></span></h3><p>Emitted when a primary broadcasts PREPARE messages to replicas.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Number of replicas the prepare was sent to</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-protocol-prepare-received" class="section-heading"><a href="#vsr-protocol-prepare-received" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :prepare, :received]</code></span></h3><p>Emitted when a backup receives a PREPARE message.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">prepare_view</code> - View number from the prepare message</li><li><code class="inline">prepare_op_number</code> - Operation number from the prepare message</li><li><code class="inline">sender</code> - Node ID of the sender (leader)</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-protocol-prepare_ok-sent" class="section-heading"><a href="#vsr-protocol-prepare_ok-sent" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :prepare_ok, :sent]</code></span></h3><p>Emitted when a backup sends a PREPARE-OK message to the primary.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">prepare_ok_view</code> - View number in the prepare-ok</li><li><code class="inline">prepare_ok_op_number</code> - Operation number in the prepare-ok</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-protocol-prepare_ok-received" class="section-heading"><a href="#vsr-protocol-prepare_ok-received" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :prepare_ok, :received]</code></span></h3><p>Emitted when a primary receives a PREPARE-OK message.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">prepare_ok_view</code> - View number from the prepare-ok</li><li><code class="inline">prepare_ok_op_number</code> - Operation number from the prepare-ok</li><li><code class="inline">sender</code> - Node ID of the sender (backup)</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-protocol-commit-sent" class="section-heading"><a href="#vsr-protocol-commit-sent" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :commit, :sent]</code></span></h3><p>Emitted when a primary broadcasts COMMIT messages.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Number of replicas the commit was sent to</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">commit_view</code> - View number in the commit message</li><li><code class="inline">commit_number</code> - Commit number in the commit message</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number (before the new commit)</li></ul><h3 id="vsr-protocol-commit-received" class="section-heading"><a href="#vsr-protocol-commit-received" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :protocol, :commit, :received]</code></span></h3><p>Emitted when a backup receives a COMMIT message.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">commit_view</code> - View number from the commit message</li><li><code class="inline">commit_number</code> - Commit number from the commit message</li><li><code class="inline">sender</code> - Node ID of the sender (primary)</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number (before applying the new commit)</li></ul><hr class="thin"/><h2 id="state-changes" class="section-heading"><a href="#state-changes" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Changes</span></h2><h3 id="vsr-state-status_change" class="section-heading"><a href="#vsr-state-status_change" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :state, :status_change]</code></span></h3><p>Emitted when a node's status changes (e.g., normal ↔ view_change).</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">old_status</code> - Previous status (<code class="inline">:normal</code>, <code class="inline">:view_change</code>, or <code class="inline">:uninitialized</code>)</li><li><code class="inline">new_status</code> - New status (<code class="inline">:normal</code>, <code class="inline">:view_change</code>, or <code class="inline">:uninitialized</code>)</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-state-commit_advance" class="section-heading"><a href="#vsr-state-commit_advance" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :state, :commit_advance]</code></span></h3><p>Emitted when the commit number advances after operations are committed.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">operations_committed</code> - Number of operations committed in this batch</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">old_commit_number</code> - Commit number before the advancement</li><li><code class="inline">new_commit_number</code> - Commit number after the advancement</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li></ul><hr class="thin"/><h2 id="view-changes" class="section-heading"><a href="#view-changes" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">View Changes</span></h2><h3 id="vsr-view_change-start" class="section-heading"><a href="#vsr-view_change-start" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :view_change, :start]</code></span></h3><p>Emitted when a view change is initiated.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">old_view</code> - Previous view number</li><li><code class="inline">new_view</code> - New view number being transitioned to</li><li><code class="inline">old_status</code> - Status before the view change</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-view_change-vote_received" class="section-heading"><a href="#vsr-view_change-vote_received" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :view_change, :vote_received]</code></span></h3><p>Emitted when a START-VIEW-CHANGE-ACK is received.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">vote_view</code> - View number from the vote</li><li><code class="inline">voter</code> - Node ID of the voter</li><li><code class="inline">total_votes</code> - Total number of votes collected for this view</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-view_change-do_view_change-received" class="section-heading"><a href="#vsr-view_change-do_view_change-received" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :view_change, :do_view_change, :received]</code></span></h3><p>Emitted when a DO-VIEW-CHANGE message is received by the new primary.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">do_view_change_view</code> - View number from the message</li><li><code class="inline">sender</code> - Node ID of the sender</li><li><code class="inline">sender_op_number</code> - Operation number from the sender's log</li><li><code class="inline">sender_commit_number</code> - Commit number from the sender</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-view_change-complete" class="section-heading"><a href="#vsr-view_change-complete" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :view_change, :complete]</code></span></h3><p>Emitted when a view change completes and the node transitions back to normal status.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">old_view</code> - Previous view number</li><li><code class="inline">new_view</code> - New view number after completion</li><li><code class="inline">new_status</code> - Status after view change (should be <code class="inline">:normal</code>)</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><hr class="thin"/><h2 id="state-machine-operations" class="section-heading"><a href="#state-machine-operations" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Machine Operations</span></h2><h3 id="vsr-state_machine-operation-start" class="section-heading"><a href="#vsr-state_machine-operation-start" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :state_machine, :operation, :start]</code></span></h3><p>Emitted when a committed operation starts execution on the state machine.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">monotonic_time</code> - Monotonic time when operation execution started</li><li><code class="inline">system_time</code> - System time when operation execution started</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">telemetry_span_context</code> - Unique reference for correlating with <code class="inline">:stop</code> event</li><li><code class="inline">extra_op_number</code> - The operation number being executed</li><li><code class="inline">operation</code> - String representation of the operation</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number (latest in log)</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-state_machine-operation-stop" class="section-heading"><a href="#vsr-state_machine-operation-stop" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :state_machine, :operation, :stop]</code></span></h3><p>Emitted when a committed operation completes execution on the state machine.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">monotonic_time</code> - Monotonic time when operation execution completed</li><li><code class="inline">duration</code> - Duration of the operation execution in native time units</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">telemetry_span_context</code> - Same reference from the corresponding <code class="inline">:start</code> event</li><li><code class="inline">extra_op_number</code> - The operation number that was executed</li><li><code class="inline">operation</code> - String representation of the operation</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><hr class="thin"/><h2 id="timer-events" class="section-heading"><a href="#timer-events" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Timer Events</span></h2><h3 id="vsr-timer-heartbeat_received" class="section-heading"><a href="#vsr-timer-heartbeat_received" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :timer, :heartbeat_received]</code></span></h3><p>Emitted when a backup receives a heartbeat from the primary.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><h3 id="vsr-timer-primary_timeout" class="section-heading"><a href="#vsr-timer-primary_timeout" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><code class="inline">[:vsr, :timer, :primary_timeout]</code></span></h3><p>Emitted when a backup detects primary inactivity timeout.</p><p><strong>Measurements:</strong></p><ul><li><code class="inline">count</code> - Always 1</li></ul><p><strong>Metadata:</strong></p><ul><li><code class="inline">timeout_ms</code> - The timeout duration in milliseconds</li><li><code class="inline">node_id</code> - The node's identifier</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status</li><li><code class="inline">cluster_size</code> - Total cluster size</li><li><code class="inline">op_number</code> - Current operation number</li><li><code class="inline">commit_number</code> - Current commit number</li></ul><hr class="thin"/><h2 id="common-metadata" class="section-heading"><a href="#common-metadata" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Common Metadata</span></h2><p>All telemetry events include the following common metadata fields (unless otherwise noted):</p><ul><li><code class="inline">node_id</code> - The identifier of the node emitting the event</li><li><code class="inline">view_number</code> - Current view number</li><li><code class="inline">status</code> - Current node status (<code class="inline">:normal</code>, <code class="inline">:view_change</code>, or <code class="inline">:uninitialized</code>)</li><li><code class="inline">cluster_size</code> - Total number of nodes in the cluster</li><li><code class="inline">op_number</code> - Current operation number (highest in the log)</li><li><code class="inline">commit_number</code> - Current commit number (highest committed operation)</li></ul><h2 id="usage-example" class="section-heading"><a href="#usage-example" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Usage Example</span></h2><pre><code class="makeup elixir" translate="no"><span class="c1"># Attach a handler to track leadership changes</span><span class="w">
+</span><span class="nc">:telemetry</span><span class="o">.</span><span class="n">attach</span><span class="p" data-group-id="5209863875-1">(</span><span class="w">
+  </span><span class="s">&quot;leadership-tracker&quot;</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="5209863875-2">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:leadership</span><span class="p">,</span><span class="w"> </span><span class="ss">:start</span><span class="p" data-group-id="5209863875-2">]</span><span class="p">,</span><span class="w">
+  </span><span class="k" data-group-id="5209863875-3">fn</span><span class="w"> </span><span class="n">event</span><span class="p">,</span><span class="w"> </span><span class="n">measurements</span><span class="p">,</span><span class="w"> </span><span class="n">metadata</span><span class="p">,</span><span class="w"> </span><span class="c">_config</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+    </span><span class="nc">IO</span><span class="o">.</span><span class="n">inspect</span><span class="p" data-group-id="5209863875-4">(</span><span class="p" data-group-id="5209863875-5">{</span><span class="n">event</span><span class="p">,</span><span class="w"> </span><span class="n">measurements</span><span class="p">,</span><span class="w"> </span><span class="n">metadata</span><span class="p" data-group-id="5209863875-5">}</span><span class="p">,</span><span class="w"> </span><span class="ss">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Leadership started&quot;</span><span class="p" data-group-id="5209863875-4">)</span><span class="w">
+  </span><span class="k" data-group-id="5209863875-3">end</span><span class="p">,</span><span class="w">
+  </span><span class="no">nil</span><span class="w">
+</span><span class="p" data-group-id="5209863875-1">)</span><span class="w">
+
+</span><span class="c1"># Attach a handler to track committed operations</span><span class="w">
+</span><span class="nc">:telemetry</span><span class="o">.</span><span class="n">attach</span><span class="p" data-group-id="5209863875-6">(</span><span class="w">
+  </span><span class="s">&quot;commit-tracker&quot;</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="5209863875-7">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:state</span><span class="p">,</span><span class="w"> </span><span class="ss">:commit_advance</span><span class="p" data-group-id="5209863875-7">]</span><span class="p">,</span><span class="w">
+  </span><span class="k" data-group-id="5209863875-8">fn</span><span class="w"> </span><span class="c">_event</span><span class="p">,</span><span class="w"> </span><span class="n">measurements</span><span class="p">,</span><span class="w"> </span><span class="n">metadata</span><span class="p">,</span><span class="w"> </span><span class="c">_config</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+    </span><span class="nc">IO</span><span class="o">.</span><span class="n">puts</span><span class="p" data-group-id="5209863875-9">(</span><span class="s">&quot;Committed </span><span class="si" data-group-id="5209863875-10">#{</span><span class="n">measurements</span><span class="o">.</span><span class="n">operations_committed</span><span class="si" data-group-id="5209863875-10">}</span><span class="s"> operations, &quot;</span><span class="w"> </span><span class="o">&lt;&gt;</span><span class="w">
+            </span><span class="s">&quot;commit_number: </span><span class="si" data-group-id="5209863875-11">#{</span><span class="n">metadata</span><span class="o">.</span><span class="n">old_commit_number</span><span class="si" data-group-id="5209863875-11">}</span><span class="s"> -&gt; </span><span class="si" data-group-id="5209863875-12">#{</span><span class="n">metadata</span><span class="o">.</span><span class="n">new_commit_number</span><span class="si" data-group-id="5209863875-12">}</span><span class="s">&quot;</span><span class="p" data-group-id="5209863875-9">)</span><span class="w">
+  </span><span class="k" data-group-id="5209863875-8">end</span><span class="p">,</span><span class="w">
+  </span><span class="no">nil</span><span class="w">
+</span><span class="p" data-group-id="5209863875-6">)</span><span class="w">
+
+</span><span class="c1"># Use telemetry_metrics for aggregation</span><span class="w">
+</span><span class="nc">Telemetry.Metrics</span><span class="o">.</span><span class="n">counter</span><span class="p" data-group-id="5209863875-13">(</span><span class="s">&quot;vsr.protocol.prepare.sent.count&quot;</span><span class="p" data-group-id="5209863875-13">)</span><span class="w">
+</span><span class="nc">Telemetry.Metrics</span><span class="o">.</span><span class="n">distribution</span><span class="p" data-group-id="5209863875-14">(</span><span class="s">&quot;vsr.state_machine.operation.duration&quot;</span><span class="p">,</span><span class="w">
+  </span><span class="ss">unit</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="5209863875-15">{</span><span class="ss">:native</span><span class="p">,</span><span class="w"> </span><span class="ss">:millisecond</span><span class="p" data-group-id="5209863875-15">}</span><span class="w">
+</span><span class="p" data-group-id="5209863875-14">)</span></code></pre><h2 id="integration-with-monitoring-systems" class="section-heading"><a href="#integration-with-monitoring-systems" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Integration with Monitoring Systems</span></h2><p>These telemetry events are designed to integrate with standard Erlang/Elixir monitoring tools:</p><ul><li><strong>Telemetry.Metrics</strong> - For aggregating and reporting metrics</li><li><strong>TelemetryMetricsPrometheus</strong> - For Prometheus integration</li><li><strong>TelemetryMetricsStatsd</strong> - For StatsD integration</li><li><strong>Phoenix.LiveDashboard</strong> - For real-time monitoring in Phoenix applications</li></ul>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="specification.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+Viewstamped Replication (VSR) Specification
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+  </div>
+</div>
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/vsr/0.1.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/vsr/0.1.0">Hex Preview</a>
+
+              (<a href="https://preview.hex.pm/preview/vsr/0.1.0/show/TELEMETRY_EVENTS.md">current file</a>)
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="vsr.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

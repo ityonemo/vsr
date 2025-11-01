@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="vsr v0.1.0">
+
+
+    <title>Vsr.Telemetry — vsr v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-ZFNMEJKT.css" />
+
+    <script defer src="dist/sidebar_items-6AC56441.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="https://github.com/ityonemo/vsr" class="sidebar-projectName" translate="no">
+vsr
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of vsr</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">Vsr.Telemetry</span> 
+      <small class="app-vsn" translate="no">(vsr v0.1.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr/telemetry.ex#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Telemetry instrumentation for VSR protocol operations.</p><h2 id="module-event-categories" class="section-heading"><a href="#module-event-categories" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Event Categories</span></h2><h3 id="module-protocol-operations-vsr-protocol" class="section-heading"><a href="#module-protocol-operations-vsr-protocol" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Protocol Operations (<code class="inline">:vsr, :protocol, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :protocol, :client_request, :start]</code> - Client request received</li><li><code class="inline">[:vsr, :protocol, :client_request, :stop]</code> - Request completed (committed)</li><li><code class="inline">[:vsr, :protocol, :prepare, :sent]</code> - Prepare message broadcast</li><li><code class="inline">[:vsr, :protocol, :prepare, :received]</code> - Prepare message processed</li><li><code class="inline">[:vsr, :protocol, :prepare_ok, :sent]</code> - PrepareOk ACK sent</li><li><code class="inline">[:vsr, :protocol, :prepare_ok, :received]</code> - PrepareOk ACK received</li><li><code class="inline">[:vsr, :protocol, :commit, :sent]</code> - Commit broadcast</li><li><code class="inline">[:vsr, :protocol, :commit, :received]</code> - Commit processed</li></ul><h3 id="module-state-machine-vsr-state_machine" class="section-heading"><a href="#module-state-machine-vsr-state_machine" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Machine (<code class="inline">:vsr, :state_machine, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :state_machine, :operation, :start]</code> - Operation execution started</li><li><code class="inline">[:vsr, :state_machine, :operation, :stop]</code> - Operation completed</li><li><code class="inline">[:vsr, :state_machine, :operation, :exception]</code> - Operation failed</li></ul><h3 id="module-view-changes-vsr-view_change" class="section-heading"><a href="#module-view-changes-vsr-view_change" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">View Changes (<code class="inline">:vsr, :view_change, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :view_change, :start]</code> - View change initiated</li><li><code class="inline">[:vsr, :view_change, :vote_received]</code> - StartViewChangeAck received</li><li><code class="inline">[:vsr, :view_change, :do_view_change, :sent]</code> - DoViewChange sent to new primary</li><li><code class="inline">[:vsr, :view_change, :do_view_change, :received]</code> - DoViewChange received by primary</li><li><code class="inline">[:vsr, :view_change, :complete]</code> - StartView processed, view established</li></ul><h3 id="module-state-transitions-vsr-state" class="section-heading"><a href="#module-state-transitions-vsr-state" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Transitions (<code class="inline">:vsr, :state, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :state, :status_change]</code> - Status changed (normal ↔ view_change)</li><li><code class="inline">[:vsr, :state, :view_change]</code> - View number changed</li><li><code class="inline">[:vsr, :state, :role_change]</code> - Primary/replica role changed</li><li><code class="inline">[:vsr, :state, :commit_advance]</code> - Commit number advanced</li></ul><h3 id="module-state-transfer-vsr-state_transfer" class="section-heading"><a href="#module-state-transfer-vsr-state_transfer" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Transfer (<code class="inline">:vsr, :state_transfer, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :state_transfer, :request_sent]</code> - GetState sent</li><li><code class="inline">[:vsr, :state_transfer, :request_received]</code> - GetState received</li><li><code class="inline">[:vsr, :state_transfer, :snapshot_sent]</code> - NewState sent</li><li><code class="inline">[:vsr, :state_transfer, :snapshot_received]</code> - NewState applied</li></ul><h3 id="module-replication-metrics-vsr-replication" class="section-heading"><a href="#module-replication-metrics-vsr-replication" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Replication Metrics (<code class="inline">:vsr, :replication, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :replication, :log_append]</code> - Entry appended to log</li><li><code class="inline">[:vsr, :replication, :log_conflict]</code> - Log conflict detected</li><li><code class="inline">[:vsr, :replication, :quorum_reached]</code> - Quorum achieved for operation</li></ul><h3 id="module-timers-vsr-timer" class="section-heading"><a href="#module-timers-vsr-timer" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Timers (<code class="inline">:vsr, :timer, ...</code>)</span></h3><ul><li><code class="inline">[:vsr, :timer, :heartbeat_sent]</code> - Heartbeat broadcast</li><li><code class="inline">[:vsr, :timer, :heartbeat_received]</code> - Heartbeat processed</li><li><code class="inline">[:vsr, :timer, :primary_timeout]</code> - Primary inactivity timeout fired</li></ul><h2 id="module-metadata" class="section-heading"><a href="#module-metadata" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Metadata</span></h2><p>Common metadata included in events:</p><ul><li><code class="inline">:node_id</code> - Node identifier</li><li><code class="inline">:view_number</code> - Current view number</li><li><code class="inline">:status</code> - Current status (:normal, :view_change, etc.)</li><li><code class="inline">:is_primary</code> - Boolean indicating if node is primary</li><li><code class="inline">:op_number</code> - Operation number (when applicable)</li><li><code class="inline">:commit_number</code> - Commit number (when applicable)</li></ul><h2 id="module-example-usage" class="section-heading"><a href="#module-example-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Example Usage</span></h2><p>Attach a handler to log all VSR events:</p><pre><code class="makeup elixir" translate="no"><span class="nc">:telemetry</span><span class="o">.</span><span class="n">attach_many</span><span class="p" data-group-id="0765946135-1">(</span><span class="w">
+  </span><span class="s">&quot;vsr-logger&quot;</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="0765946135-2">[</span><span class="w">
+    </span><span class="p" data-group-id="0765946135-3">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:protocol</span><span class="p">,</span><span class="w"> </span><span class="ss">:client_request</span><span class="p">,</span><span class="w"> </span><span class="ss">:start</span><span class="p" data-group-id="0765946135-3">]</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="0765946135-4">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:protocol</span><span class="p">,</span><span class="w"> </span><span class="ss">:client_request</span><span class="p">,</span><span class="w"> </span><span class="ss">:stop</span><span class="p" data-group-id="0765946135-4">]</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="0765946135-5">[</span><span class="ss">:vsr</span><span class="p">,</span><span class="w"> </span><span class="ss">:state</span><span class="p">,</span><span class="w"> </span><span class="ss">:commit_advance</span><span class="p" data-group-id="0765946135-5">]</span><span class="w">
+  </span><span class="p" data-group-id="0765946135-2">]</span><span class="p">,</span><span class="w">
+  </span><span class="k" data-group-id="0765946135-6">fn</span><span class="w"> </span><span class="n">event</span><span class="p">,</span><span class="w"> </span><span class="n">measurements</span><span class="p">,</span><span class="w"> </span><span class="n">metadata</span><span class="p">,</span><span class="w"> </span><span class="c">_config</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+    </span><span class="nc">Logger</span><span class="o">.</span><span class="n">info</span><span class="p" data-group-id="0765946135-7">(</span><span class="s">&quot;VSR Event: </span><span class="si" data-group-id="0765946135-8">#{</span><span class="n">inspect</span><span class="p" data-group-id="0765946135-9">(</span><span class="n">event</span><span class="p" data-group-id="0765946135-9">)</span><span class="si" data-group-id="0765946135-8">}</span><span class="s">&quot;</span><span class="p">,</span><span class="w">
+      </span><span class="ss">measurements</span><span class="p">:</span><span class="w"> </span><span class="n">measurements</span><span class="p">,</span><span class="w">
+      </span><span class="ss">metadata</span><span class="p">:</span><span class="w"> </span><span class="n">metadata</span><span class="w">
+    </span><span class="p" data-group-id="0765946135-7">)</span><span class="w">
+  </span><span class="k" data-group-id="0765946135-6">end</span><span class="p">,</span><span class="w">
+  </span><span class="no">nil</span><span class="w">
+</span><span class="p" data-group-id="0765946135-1">)</span></code></pre>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#common_metadata/1" data-no-tooltip="" translate="no">common_metadata(state)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Build common metadata from VSR state.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#execute/4" data-no-tooltip="" translate="no">execute(event, state, measurements, extra_metadata \\ %{})</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Execute a telemetry event with the given measurements and metadata.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#span/4" data-no-tooltip="" translate="no">span(event, state, extra_metadata \\ %{}, fun)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Execute a telemetry span with proper timing measurements and span context.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+
+    <div class="functions-list">
+<section class="detail" id="common_metadata/1">
+
+  <div class="detail-header">
+    <a href="#common_metadata/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">common_metadata(state)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr/telemetry.ex#L175" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> common_metadata(<a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()) :: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()</pre>
+
+      </div>
+
+<p>Build common metadata from VSR state.</p><p>Extracts standard VSR state fields that are commonly included in telemetry events.</p>
+  </section>
+</section>
+<section class="detail" id="execute/4">
+
+    <span id="execute/3"></span>
+
+  <div class="detail-header">
+    <a href="#execute/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">execute(event, state, measurements, extra_metadata \\ %{})</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr/telemetry.ex#L109" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> execute([<a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">atom</a>()], <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()) :: :ok</pre>
+
+      </div>
+
+<p>Execute a telemetry event with the given measurements and metadata.</p><p>The event name will automatically have <code class="inline">[:vsr]</code> prepended to it.</p><p>Common metadata (node_id, view_number, etc.) is automatically extracted
+from the state and merged with any additional metadata provided.</p><h2 id="execute/4-examples" class="section-heading"><a href="#execute/4-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="c1"># Basic usage</span><span class="w">
+</span><span class="nc">Vsr.Telemetry</span><span class="o">.</span><span class="n">execute</span><span class="p" data-group-id="9105603663-1">(</span><span class="w">
+  </span><span class="p" data-group-id="9105603663-2">[</span><span class="ss">:protocol</span><span class="p">,</span><span class="w"> </span><span class="ss">:prepare</span><span class="p">,</span><span class="w"> </span><span class="ss">:sent</span><span class="p" data-group-id="9105603663-2">]</span><span class="p">,</span><span class="w">
+  </span><span class="n">state</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="9105603663-3">%{</span><span class="ss">count</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="9105603663-3">}</span><span class="w">
+</span><span class="p" data-group-id="9105603663-1">)</span><span class="w">
+</span><span class="c1"># Becomes: [:vsr, :protocol, :prepare, :sent]</span><span class="w">
+
+</span><span class="c1"># With extra metadata</span><span class="w">
+</span><span class="nc">Vsr.Telemetry</span><span class="o">.</span><span class="n">execute</span><span class="p" data-group-id="9105603663-4">(</span><span class="w">
+  </span><span class="p" data-group-id="9105603663-5">[</span><span class="ss">:protocol</span><span class="p">,</span><span class="w"> </span><span class="ss">:prepare</span><span class="p">,</span><span class="w"> </span><span class="ss">:sent</span><span class="p" data-group-id="9105603663-5">]</span><span class="p">,</span><span class="w">
+  </span><span class="n">state</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="9105603663-6">%{</span><span class="ss">count</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="9105603663-6">}</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="9105603663-7">%{</span><span class="ss">custom_field</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;value&quot;</span><span class="p" data-group-id="9105603663-7">}</span><span class="w">
+</span><span class="p" data-group-id="9105603663-4">)</span></code></pre>
+  </section>
+</section>
+<section class="detail" id="span/4">
+
+    <span id="span/3"></span>
+
+  <div class="detail-header">
+    <a href="#span/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">span(event, state, extra_metadata \\ %{}, fun)</h1>
+
+
+        <a href="https://github.com/ityonemo/vsr/blob/main/lib/vsr/telemetry.ex#L156" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> span([<a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">atom</a>()], <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>(), (-&gt; result)) :: result when result: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()</pre>
+
+      </div>
+
+<p>Execute a telemetry span with proper timing measurements and span context.</p><p>The event name will automatically have <code class="inline">[:vsr]</code> prepended to it.
+The span will emit both <code class="inline">:start</code> and <code class="inline">:stop</code> (or <code class="inline">:exception</code>) events.</p><p>Common metadata is automatically extracted from state and a unique span context
+is generated using <code class="inline">make_ref()</code>.</p><h2 id="span/4-examples" class="section-heading"><a href="#span/4-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="c1"># Wrap an operation in a telemetry span</span><span class="w">
+</span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Vsr.Telemetry</span><span class="o">.</span><span class="n">span</span><span class="p" data-group-id="8054528696-1">(</span><span class="w">
+  </span><span class="p" data-group-id="8054528696-2">[</span><span class="ss">:protocol</span><span class="p">,</span><span class="w"> </span><span class="ss">:client_request</span><span class="p" data-group-id="8054528696-2">]</span><span class="p">,</span><span class="w">
+  </span><span class="n">state</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="8054528696-3">%{</span><span class="ss">custom</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;metadata&quot;</span><span class="p" data-group-id="8054528696-3">}</span><span class="p">,</span><span class="w">
+  </span><span class="k" data-group-id="8054528696-4">fn</span><span class="w"> </span><span class="o">-&gt;</span><span class="w">
+    </span><span class="c1"># Do work</span><span class="w">
+    </span><span class="ss">:ok</span><span class="w">
+  </span><span class="k" data-group-id="8054528696-4">end</span><span class="w">
+</span><span class="p" data-group-id="8054528696-1">)</span></code></pre><h2 id="span/4-events-emitted" class="section-heading"><a href="#span/4-events-emitted" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Events Emitted</span></h2><ul><li><code class="inline">[:vsr, :protocol, :client_request, :start]</code> - When span begins</li><li><code class="inline">[:vsr, :protocol, :client_request, :stop]</code> - When span completes successfully</li><li><code class="inline">[:vsr, :protocol, :client_request, :exception]</code> - When span raises an exception</li></ul><h2 id="span/4-measurements" class="section-heading"><a href="#span/4-measurements" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Measurements</span></h2><ul><li><code class="inline">:start</code> event: <code class="inline">monotonic_time</code>, <code class="inline">system_time</code></li><li><code class="inline">:stop</code> event: <code class="inline">monotonic_time</code>, <code class="inline">duration</code></li><li><code class="inline">:exception</code> event: <code class="inline">monotonic_time</code>, <code class="inline">duration</code></li></ul><h2 id="span/4-metadata" class="section-heading"><a href="#span/4-metadata" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Metadata</span></h2><p>All events include:</p><ul><li>Common metadata from state (node_id, view_number, etc.)</li><li><code class="inline">telemetry_span_context</code> - Unique reference for correlating start/stop events</li><li>Any additional metadata provided</li></ul>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/vsr/0.1.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/vsr/0.1.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="vsr.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

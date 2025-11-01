@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="vsr v0.1.0">
+
+
+    <title>Viewstamped Replication (VSR) Specification — vsr v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-ZFNMEJKT.css" />
+
+    <script defer src="dist/sidebar_items-6AC56441.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="https://github.com/ityonemo/vsr" class="sidebar-projectName" translate="no">
+vsr
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of vsr</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Viewstamped Replication (VSR) Specification</h1>
+
+
+      <a href="https://github.com/ityonemo/vsr/blob/main/SPECIFICATION.md#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+<h2 id="overview" class="section-heading"><a href="#overview" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Overview</span></h2><p>Viewstamped Replication is a consensus algorithm for building fault-tolerant distributed systems. VSR ensures that a collection of replicas agree on a sequence of operations, even in the presence of failures.</p><h2 id="core-concepts" class="section-heading"><a href="#core-concepts" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Core Concepts</span></h2><h3 id="roles" class="section-heading"><a href="#roles" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Roles</span></h3><ul><li><strong>Primary</strong>: The current leader that processes client requests and coordinates replication</li><li><strong>Backup</strong>: Followers that maintain replicated state and can become primary</li><li><strong>Client</strong>: External entities that submit operations to the system</li></ul><h3 id="view" class="section-heading"><a href="#view" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">View</span></h3><p>A <strong>view</strong> is a configuration period with a designated primary. Views are numbered sequentially starting from 0.
+The primary for view <code class="inline">v</code> is determined by: <code class="inline">primary = configuration[v % length(configuration)]</code></p><h3 id="operation-log" class="section-heading"><a href="#operation-log" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Operation Log</span></h3><p>Each replica maintains an ordered log of operations. Operations are identified by:</p><ul><li><strong>View number</strong>: The view in which the operation was proposed</li><li><strong>Operation number</strong>: Sequential number within the view</li><li><strong>Operation</strong>: The actual operation to execute</li><li><strong>Sender ID</strong>: The replica that proposed the operation</li></ul><h3 id="replica-state" class="section-heading"><a href="#replica-state" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Replica State</span></h3><p>Each replica maintains:</p><pre><code class="makeup elixir" translate="no"><span class="p" data-group-id="3925042574-1">%</span><span class="nc" data-group-id="3925042574-1">Vsr.Replica</span><span class="p" data-group-id="3925042574-1">{</span><span class="w">
+  </span><span class="ss">replica_id</span><span class="p">:</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-2">(</span><span class="p" data-group-id="3925042574-2">)</span><span class="p">,</span><span class="w">           </span><span class="c1"># Unique identifier for this replica</span><span class="w">
+  </span><span class="ss">view_number</span><span class="p">:</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-3">(</span><span class="p" data-group-id="3925042574-3">)</span><span class="p">,</span><span class="w">          </span><span class="c1"># Current view number</span><span class="w">
+  </span><span class="ss">status</span><span class="p">:</span><span class="w"> </span><span class="ss">:normal</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="ss">:view_change</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="ss">:recovering</span><span class="p">,</span><span class="w">  </span><span class="c1"># Current operational status</span><span class="w">
+  </span><span class="ss">op_number</span><span class="p">:</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-4">(</span><span class="p" data-group-id="3925042574-4">)</span><span class="p">,</span><span class="w">            </span><span class="c1"># Highest operation number seen</span><span class="w">
+  </span><span class="ss">commit_number</span><span class="p">:</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-5">(</span><span class="p" data-group-id="3925042574-5">)</span><span class="p">,</span><span class="w">        </span><span class="c1"># Highest committed operation number</span><span class="w">
+  </span><span class="ss">log</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="3925042574-6">[</span><span class="n">log_entry</span><span class="p" data-group-id="3925042574-7">(</span><span class="p" data-group-id="3925042574-7">)</span><span class="p" data-group-id="3925042574-6">]</span><span class="p">,</span><span class="w">             </span><span class="c1"># Ordered list of operations</span><span class="w">
+  </span><span class="ss">configuration</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="3925042574-8">[</span><span class="n">integer</span><span class="p" data-group-id="3925042574-9">(</span><span class="p" data-group-id="3925042574-9">)</span><span class="p" data-group-id="3925042574-8">]</span><span class="p">,</span><span class="w">      </span><span class="c1"># List of all replica IDs</span><span class="w">
+  </span><span class="ss">primary</span><span class="p">:</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-10">(</span><span class="p" data-group-id="3925042574-10">)</span><span class="p">,</span><span class="w">             </span><span class="c1"># Current primary replica ID</span><span class="w">
+  </span><span class="ss">store</span><span class="p">:</span><span class="w"> </span><span class="n">term</span><span class="p" data-group-id="3925042574-11">(</span><span class="p" data-group-id="3925042574-11">)</span><span class="p">,</span><span class="w">                  </span><span class="c1"># State machine storage</span><span class="w">
+  </span><span class="ss">client_table</span><span class="p">:</span><span class="w"> </span><span class="n">term</span><span class="p" data-group-id="3925042574-12">(</span><span class="p" data-group-id="3925042574-12">)</span><span class="p">,</span><span class="w">           </span><span class="c1"># Client request deduplication</span><span class="w">
+  </span><span class="ss">prepare_ok_count</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="3925042574-13">%{</span><span class="n">integer</span><span class="p" data-group-id="3925042574-14">(</span><span class="p" data-group-id="3925042574-14">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-15">(</span><span class="p" data-group-id="3925042574-15">)</span><span class="p" data-group-id="3925042574-13">}</span><span class="p">,</span><span class="w">  </span><span class="c1"># Count of prepare-ok per operation</span><span class="w">
+  </span><span class="ss">view_change_votes</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="3925042574-16">%{</span><span class="n">integer</span><span class="p" data-group-id="3925042574-17">(</span><span class="p" data-group-id="3925042574-17">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">boolean</span><span class="p" data-group-id="3925042574-18">(</span><span class="p" data-group-id="3925042574-18">)</span><span class="p" data-group-id="3925042574-16">}</span><span class="p">,</span><span class="w"> </span><span class="c1"># Votes for view change</span><span class="w">
+  </span><span class="ss">last_normal_view</span><span class="p">:</span><span class="w"> </span><span class="n">integer</span><span class="p" data-group-id="3925042574-19">(</span><span class="p" data-group-id="3925042574-19">)</span><span class="w">     </span><span class="c1"># Last view in normal operation</span><span class="w">
+</span><span class="p" data-group-id="3925042574-1">}</span></code></pre><h2 id="algorithm-phases" class="section-heading"><a href="#algorithm-phases" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Algorithm Phases</span></h2><h3 id="1-normal-operation-phase" class="section-heading"><a href="#1-normal-operation-phase" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">1. Normal Operation Phase</span></h3><h4>Client Request Processing</h4><p><strong>Message</strong>: Client sends operation to primary
+<strong>Internal State Changes</strong>:</p><ol><li><strong>Primary receives client request</strong>:<ul><li>Checks if request already processed (client_table lookup)</li><li>If duplicate: return cached result</li><li>If new: increment <code class="inline">op_number</code></li><li>Create log entry: <code class="inline">{view_number, op_number, operation, replica_id}</code></li><li>Append to <code class="inline">log</code></li><li>Initialize <code class="inline">prepare_ok_count[op_number] = 1</code> (self-vote)</li></ul></li></ol><h4>Prepare Phase</h4><p><strong>Message</strong>: Primary sends <code class="inline">PREPARE(view, op-num, operation, commit-num)</code> to all backups
+<strong>Internal State Changes</strong>:</p><ol><li><p><strong>Backup receives PREPARE</strong>:</p><ul><li>Validates <code class="inline">view &gt;= view_number</code></li><li>If <code class="inline">op_number &gt; length(log)</code>: append operation to <code class="inline">log</code></li><li>Update <code class="inline">op_number = max(op_number, received_op_number)</code></li><li>Send <code class="inline">PREPARE-OK(view, op-num, replica-id)</code> to primary</li></ul></li><li><p><strong>Primary receives PREPARE-OK</strong>:</p><ul><li>Increment <code class="inline">prepare_ok_count[op_number]</code></li><li>If <code class="inline">prepare_ok_count[op_number] &gt; majority</code>:<ul><li>Update <code class="inline">commit_number = max(commit_number, op_number)</code></li><li>Apply all operations where <code class="inline">log_op_number &lt;= commit_number</code> to state machine</li><li>Send <code class="inline">COMMIT(view, commit-num)</code> to all backups</li></ul></li></ul></li></ol><h4>Commit Phase</h4><p><strong>Message</strong>: Primary sends <code class="inline">COMMIT(view, commit-num)</code> to backups
+<strong>Internal State Changes</strong>:</p><ol><li><strong>Backup receives COMMIT</strong>:<ul><li>Validates <code class="inline">view == view_number</code></li><li>If <code class="inline">commit_number &lt; received_commit_number</code>:<ul><li>Update <code class="inline">commit_number = received_commit_number</code></li><li>Apply all operations where <code class="inline">log_op_number &lt;= commit_number</code> to state machine</li><li>Update client_table with results</li></ul></li></ul></li></ol><h3 id="2-view-change-phase" class="section-heading"><a href="#2-view-change-phase" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">2. View Change Phase</span></h3><h4>Detecting Primary Failure</h4><p><strong>Trigger</strong>: Backup detects primary timeout or failure
+<strong>Internal State Changes</strong>:</p><ol><li><strong>Backup initiates view change</strong>:<ul><li>Increment <code class="inline">view_number</code></li><li>Set <code class="inline">status = :view_change</code></li><li>Calculate new <code class="inline">primary = configuration[view_number % length(configuration)]</code></li><li>Initialize <code class="inline">view_change_votes[replica_id] = true</code></li><li>Send <code class="inline">START-VIEW-CHANGE(view, replica-id)</code> to all replicas</li></ul></li></ol><h4>Start View Change Phase</h4><p><strong>Message</strong>: <code class="inline">START-VIEW-CHANGE(view, replica-id)</code> sent to all replicas
+<strong>Internal State Changes</strong>:</p><ol><li><strong>Replica receives START-VIEW-CHANGE</strong>:<ul><li>If <code class="inline">view &gt; view_number</code>:<ul><li>Update <code class="inline">view_number = view</code></li><li>Set <code class="inline">status = :view_change</code> </li><li>Update <code class="inline">primary = configuration[view % length(configuration)]</code></li><li>Set <code class="inline">view_change_votes[sender_id] = true</code></li><li>Send <code class="inline">START-VIEW-CHANGE-ACK(view, replica-id)</code> to sender</li></ul></li><li>If <code class="inline">count(view_change_votes) &gt; majority</code>:<ul><li>Send <code class="inline">DO-VIEW-CHANGE(view, log, last_normal_view, op_number, commit_number, replica-id)</code> to new primary</li></ul></li></ul></li></ol><h4>Do View Change Phase</h4><p><strong>Message</strong>: <code class="inline">DO-VIEW-CHANGE(view, log, last_normal_view, op_number, commit_number, replica-id)</code> sent to new primary
+<strong>Internal State Changes</strong>:</p><ol><li><strong>New primary receives DO-VIEW-CHANGE</strong>:<ul><li>If <code class="inline">view &gt;= view_number</code>:<ul><li>Merge received log with local log (take highest op_number entries)</li><li>Update <code class="inline">view_number = view</code></li><li>Update <code class="inline">log = merged_log</code></li><li>Update <code class="inline">op_number = max(op_number, received_op_number)</code></li><li>Update <code class="inline">commit_number = max(commit_number, received_commit_number)</code></li><li>Set <code class="inline">status = :normal</code></li><li>Send <code class="inline">START-VIEW(view, log, op_number, commit_number)</code> to all other replicas</li></ul></li></ul></li></ol><h4>Start View Phase</h4><p><strong>Message</strong>: <code class="inline">START-VIEW(view, log, op_number, commit_number)</code> sent from new primary
+<strong>Internal State Changes</strong>:</p><ol><li><strong>Replica receives START-VIEW</strong>:<ul><li>If <code class="inline">view &gt;= view_number</code>:<ul><li>Update <code class="inline">view_number = view</code></li><li>Replace <code class="inline">log = received_log</code></li><li>Update <code class="inline">op_number = received_op_number</code></li><li>Update <code class="inline">commit_number = received_commit_number</code></li><li>Set <code class="inline">status = :normal</code></li><li>Update <code class="inline">primary = configuration[view % length(configuration)]</code></li><li>Apply all committed operations to state machine</li><li>Send <code class="inline">VIEW-CHANGE-OK(view, replica-id)</code> to new primary</li></ul></li></ul></li></ol><h4>View Change Completion</h4><p><strong>Message</strong>: <code class="inline">VIEW-CHANGE-OK(view, replica-id)</code> sent to new primary
+<strong>Internal State Changes</strong>:</p><ol><li><strong>New primary receives VIEW-CHANGE-OK</strong>:<ul><li>Set <code class="inline">view_change_votes[sender_id] = true</code></li><li>If <code class="inline">count(view_change_votes) &gt; majority</code>:<ul><li>Clear <code class="inline">view_change_votes = %{}</code></li><li>Set <code class="inline">last_normal_view = view</code></li><li>Resume normal operation</li></ul></li></ul></li></ol><h3 id="3-state-transfer-phase" class="section-heading"><a href="#3-state-transfer-phase" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">3. State Transfer Phase</span></h3><h4>Requesting State</h4><p><strong>Message</strong>: Lagging replica sends <code class="inline">GET-STATE(view, op_number, replica-id)</code> to primary
+<strong>Internal State Changes</strong>:</p><ol><li><p><strong>Lagging replica initiates</strong>:</p><ul><li>Detect it's behind (lower op_number or view_number)</li><li>Send <code class="inline">GET-STATE(view_number, op_number, replica_id)</code> to primary</li></ul></li><li><p><strong>Primary receives GET-STATE</strong>:</p><ul><li>Package current state: <code class="inline">{view_number, log, op_number, commit_number}</code></li><li>Send <code class="inline">NEW-STATE(view, log, op_number, commit_number)</code> to requester</li></ul></li></ol><h4>Receiving State</h4><p><strong>Message</strong>: <code class="inline">NEW-STATE(view, log, op_number, commit_number)</code> sent from primary
+<strong>Internal State Changes</strong>:</p><ol><li><strong>Lagging replica receives NEW-STATE</strong>:<ul><li>If <code class="inline">view &gt;= view_number OR op_number &gt; local_op_number</code>:<ul><li>Update <code class="inline">view_number = received_view</code></li><li>Replace <code class="inline">log = received_log</code></li><li>Update <code class="inline">op_number = received_op_number</code></li><li>Update <code class="inline">commit_number = received_commit_number</code></li><li>Set <code class="inline">status = :normal</code></li><li>Apply all committed operations to state machine</li><li>Resume normal operation</li></ul></li></ul></li></ol><h2 id="message-types" class="section-heading"><a href="#message-types" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Message Types</span></h2><h3 id="normal-operation-messages" class="section-heading"><a href="#normal-operation-messages" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Normal Operation Messages</span></h3><ul><li><code class="inline">PREPARE(view, op-num, operation, commit-num)</code></li><li><code class="inline">PREPARE-OK(view, op-num, replica-id)</code></li><li><code class="inline">COMMIT(view, commit-num)</code></li></ul><h3 id="view-change-messages" class="section-heading"><a href="#view-change-messages" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">View Change Messages</span></h3><ul><li><code class="inline">START-VIEW-CHANGE(view, replica-id)</code></li><li><code class="inline">START-VIEW-CHANGE-ACK(view, replica-id)</code></li><li><code class="inline">DO-VIEW-CHANGE(view, log, last_normal_view, op_number, commit_number, replica-id)</code></li><li><code class="inline">START-VIEW(view, log, op_number, commit_number)</code></li><li><code class="inline">VIEW-CHANGE-OK(view, replica-id)</code></li></ul><h3 id="state-transfer-messages" class="section-heading"><a href="#state-transfer-messages" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Transfer Messages</span></h3><ul><li><code class="inline">GET-STATE(view, op_number, replica-id)</code></li><li><code class="inline">NEW-STATE(view, log, op_number, commit_number)</code></li></ul><h3 id="client-messages" class="section-heading"><a href="#client-messages" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Client Messages</span></h3><ul><li><code class="inline">REQUEST(operation, client-id, request-id)</code></li><li><code class="inline">REPLY(request-id, result)</code></li></ul><h2 id="safety-properties" class="section-heading"><a href="#safety-properties" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Safety Properties</span></h2><ol><li><strong>Agreement</strong>: All replicas execute the same operations in the same order</li><li><strong>Integrity</strong>: A replica executes an operation at most once</li><li><strong>Validity</strong>: Only proposed operations are executed</li></ol><h2 id="liveness-properties" class="section-heading"><a href="#liveness-properties" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Liveness Properties</span></h2><ol><li><strong>Termination</strong>: Every operation eventually executes (assuming eventual synchrony)</li><li><strong>View Change</strong>: System eventually selects a new primary when current primary fails</li></ol><h2 id="state-machine-integration" class="section-heading"><a href="#state-machine-integration" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">State Machine Integration</span></h2><p>The VSR protocol is agnostic to the underlying state machine. Operations are applied in order to maintain consistency:</p><pre><code class="makeup elixir" translate="no"><span class="kd">defprotocol</span><span class="w"> </span><span class="nc">Vsr.StateMachine</span><span class="w"> </span><span class="k" data-group-id="6079451108-1">do</span><span class="w">
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Apply an operation to the state machine&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">_apply_operation</span><span class="p" data-group-id="6079451108-2">(</span><span class="n">state_machine</span><span class="p">,</span><span class="w"> </span><span class="n">operation</span><span class="p" data-group-id="6079451108-2">)</span><span class="w">
+  
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Get current state for state transfer&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">_get_state</span><span class="p" data-group-id="6079451108-3">(</span><span class="n">state_machine</span><span class="p" data-group-id="6079451108-3">)</span><span class="w">
+  
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Set state during state transfer&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">_set_state</span><span class="p" data-group-id="6079451108-4">(</span><span class="n">state_machine</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p" data-group-id="6079451108-4">)</span><span class="w">
+</span><span class="k" data-group-id="6079451108-1">end</span></code></pre><h2 id="log-storage-abstraction" class="section-heading"><a href="#log-storage-abstraction" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Log Storage Abstraction</span></h2><p>The operation log can be implemented with different backends:</p><pre><code class="makeup elixir" translate="no"><span class="kd">defprotocol</span><span class="w"> </span><span class="nc">Vsr.Log</span><span class="w"> </span><span class="k" data-group-id="5975816128-1">do</span><span class="w">
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Append operation to log&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">append</span><span class="p" data-group-id="5975816128-2">(</span><span class="n">log</span><span class="p">,</span><span class="w"> </span><span class="n">view</span><span class="p">,</span><span class="w"> </span><span class="n">op_number</span><span class="p">,</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">sender_id</span><span class="p" data-group-id="5975816128-2">)</span><span class="w">
+  
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Get operation at index&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">get</span><span class="p" data-group-id="5975816128-3">(</span><span class="n">log</span><span class="p">,</span><span class="w"> </span><span class="n">index</span><span class="p" data-group-id="5975816128-3">)</span><span class="w">
+  
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Get all operations&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">get_all</span><span class="p" data-group-id="5975816128-4">(</span><span class="n">log</span><span class="p" data-group-id="5975816128-4">)</span><span class="w">
+  
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Get operations from index onwards&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">get_from</span><span class="p" data-group-id="5975816128-5">(</span><span class="n">log</span><span class="p">,</span><span class="w"> </span><span class="n">index</span><span class="p" data-group-id="5975816128-5">)</span><span class="w">
+  
+  </span><span class="na">@doc</span><span class="w"> </span><span class="s">&quot;Get log length&quot;</span><span class="w">
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">length</span><span class="p" data-group-id="5975816128-6">(</span><span class="n">log</span><span class="p" data-group-id="5975816128-6">)</span><span class="w">
+</span><span class="k" data-group-id="5975816128-1">end</span></code></pre><h2 id="correctness-conditions" class="section-heading"><a href="#correctness-conditions" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Correctness Conditions</span></h2><ol><li><strong>View Synchronization</strong>: All replicas agree on current view</li><li><strong>Log Consistency</strong>: Replica logs are consistent up to commit point</li><li><strong>Primary Completeness</strong>: New primary has all committed operations</li><li><strong>Monotonicity</strong>: View numbers and operation numbers never decrease</li></ol><p>This specification provides the foundation for implementing a correct and efficient VSR-based distributed system with clear understanding of internal state transitions.</p>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="changelog.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+Changelog
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+      <a href="telemetry_events.html" class="bottom-actions-button" rel="next">
+        <span class="subheader">
+          Next Page →
+        </span>
+        <span class="title">
+Telemetry Events
+        </span>
+      </a>
+
+  </div>
+</div>
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/vsr/0.1.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/vsr/0.1.0">Hex Preview</a>
+
+              (<a href="https://preview.hex.pm/preview/vsr/0.1.0/show/SPECIFICATION.md">current file</a>)
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="vsr.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>
