@@ -404,7 +404,8 @@ defmodule VsrServer do
 
   @type node_id :: term
   @typep request_id :: non_neg_integer
-  @typep client_processing :: {:processing, request_id}
+  # Waiters can be GenServer.from tuples or custom from terms (e.g., Maelstrom maps)
+  @typep client_processing :: {:processing, request_id, waiters :: [term()]}
   @typep client_cached :: {:cached, request_id, result :: term}
   @typep client_entry :: client_processing | client_cached
 
@@ -688,9 +689,15 @@ defmodule VsrServer do
               # Older request - drop without reply (client should have already received response)
               {:noreply, state}
 
+            {:ok, {:processing, ^request_id, waiters}} ->
+              # Duplicate request while processing - add to waiter list
+              updated_entry = {:processing, request_id, [from | waiters]}
+              updated_table = Map.put(state.client_table, client_id, updated_entry)
+              {:noreply, %{state | client_table: updated_table}}
+
             _ ->
-              # Request is still processing - duplicate request starves waiting for original to complete
-              # TODO: Implement waiter list to support concurrent duplicate requests getting same reply
+              # Different request_id while processing (shouldn't happen with proper client behavior)
+              # Drop the request
               {:noreply, state}
           end
 
@@ -748,10 +755,10 @@ defmodule VsrServer do
     updated_state =
       if client_id && request_id do
         # We'll cache the result when the operation commits
-        # For now, just store that we're processing this request
+        # Store with empty waiter list initially
         %{
           new_state
-          | client_table: Map.put(new_state.client_table, client_id, {:processing, request_id})
+          | client_table: Map.put(new_state.client_table, client_id, {:processing, request_id, []})
         }
       else
         new_state
@@ -1530,7 +1537,7 @@ defmodule VsrServer do
         }
       )
 
-      # Update client_table with results for deduplication
+      # Send client replies and update client_table with results for deduplication
       updated_client_table =
         if primary?(state) do
           Enum.reduce(operation_results, state.client_table, fn {_op_num, result, sender_id},
@@ -1539,24 +1546,39 @@ defmodule VsrServer do
             case sender_id do
               %{client_id: client_id, request_id: request_id}
               when not is_nil(client_id) and not is_nil(request_id) ->
-                Map.put(client_table_acc, client_id, {:cached, request_id, result})
+                # Look up the current entry to check for waiters before caching
+                case Map.get(client_table_acc, client_id) do
+                  {:processing, ^request_id, waiters} ->
+                    # Reply to all waiters before caching
+                    Enum.each(waiters, fn waiter ->
+                      state.module.send_reply(waiter, result, state.inner)
+                    end)
+
+                    # Also reply to the original sender
+                    state.module.send_reply(sender_id, result, state.inner)
+
+                    # Cache the result (without waiters)
+                    Map.put(client_table_acc, client_id, {:cached, request_id, result})
+
+                  _ ->
+                    # No processing entry found (shouldn't happen, but handle gracefully)
+                    # Reply to the original sender
+                    state.module.send_reply(sender_id, result, state.inner)
+                    Map.put(client_table_acc, client_id, {:cached, request_id, result})
+                end
 
               _ ->
+                # Not a deduplicated request, just send reply if there's a sender
+                if sender_id do
+                  state.module.send_reply(sender_id, result, state.inner)
+                end
+
                 client_table_acc
             end
           end)
         else
           state.client_table
         end
-
-      # Send client replies for committed operations (only primary does this)
-      if primary?(state) do
-        Enum.each(operation_results, fn {_op_num, result, sender_id} ->
-          if sender_id do
-            state.module.send_reply(sender_id, result, state.inner)
-          end
-        end)
-      end
 
       %{
         state
