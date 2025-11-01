@@ -19,6 +19,14 @@ A distributed consensus system implementing the Viewstamped Replication (VSR) pr
 - Memory management (cleanup of committed operation metadata)
 - Pluggable state machines, log storage, and communication layers
 
+✅ **Observability**
+- Comprehensive telemetry instrumentation following Erlang/Elixir conventions
+- Leadership span tracking (when nodes are primary/leader)
+- Protocol event tracking (prepare, commit, view changes)
+- State machine operation spans with duration metrics
+- Timer and heartbeat event tracking
+- See [TELEMETRY_EVENTS.md](TELEMETRY_EVENTS.md) for complete event documentation
+
 ## Current Limitations
 
 ⚠️ **Client Request Deduplication**: Currently only implemented for read-only operations. Write operations may be processed multiple times if clients retry requests due to network timeouts. This does not affect VSR protocol correctness or safety properties, but may impact user experience.
@@ -60,7 +68,7 @@ result = VsrKv.get(replica, "key")  # Returns "value"
 mix test
 ```
 
-**Test Status**: 35/35 tests passing (3 skipped - write deduplication and edge cases documented above)
+**Test Status**: 106/106 tests passing
 
 ## Architecture
 
