@@ -1,0 +1,41 @@
+#!/usr/bin/env elixir
+
+# VSR Node V2 LogEntry Point for Maelstrom Integration
+# This script starts a VSR node using the new VsrServer/MaelstromKv architecture
+
+defmodule VsrNodeV2 do
+  @moduledoc """
+  LogEntry point for VSR nodes using the new VsrServer architecture.
+  
+  This module handles the Maelstrom protocol integration and manages
+  the lifecycle of VSR nodes in the distributed system.
+  """
+  
+  require Logger
+  
+  def main(_args) do
+    # Configure logging for Maelstrom (goes to stderr)
+    Logger.configure(level: :info)
+    
+    # Start required applications
+    {:ok, _} = Application.ensure_all_started(:vsr)
+    
+    # Start the Maelstrom node
+    {:ok, node_pid} = Maelstrom.NodeV2.start_link()
+    
+    # Start the STDIN reader
+    {:ok, stdin_pid} = Maelstrom.StdinV2.start_link(node_pid)
+    
+    Logger.info("VSR Node V2 started successfully")
+    
+    # Keep the process running
+    receive do
+      :stop -> :ok
+    after
+      :infinity -> :ok
+    end
+  end
+end
+
+# Start the node
+VsrNodeV2.main(System.argv())

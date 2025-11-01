@@ -231,7 +231,9 @@ defmodule MaelstromKv do
   end
 
   def log_get_from(log, op_number) do
-    :dets.select(log, [{{:"$1", :"$2"}, [{:>=, {:map_get, :op_number, :"$2"}, op_number}], [:"$2"]}])
+    :dets.select(log, [
+      {{:"$1", :"$2"}, [{:>=, {:map_get, :op_number, :"$2"}, op_number}], [:"$2"]}
+    ])
   end
 
   def log_length(log), do: :dets.info(log, :size)
@@ -272,6 +274,7 @@ defmodule MaelstromKv do
       [{^from_hash, from}] ->
         :ets.delete(from_table, from_hash)
         GenServer.reply(from, reply)
+
       [] ->
         Logger.error("reply failed, could not find hash #{from_hash}")
     end
@@ -282,7 +285,10 @@ defmodule MaelstromKv do
   # VSR commit handler for Maelstrom operations
   def handle_commit(["read", key], state), do: read_impl(key, state)
   def handle_commit(["write", key, value], state), do: write_impl(key, value, state)
-  def handle_commit(["cas", key, from_value, to_value], state), do: cas_impl(key, from_value, to_value, state)
+
+  def handle_commit(["cas", key, from_value, to_value], state),
+    do: cas_impl(key, from_value, to_value, state)
+
   # No other commit messages are acknowledged.
 
   # Handle Maelstrom JSON protocol messages

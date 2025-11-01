@@ -1,6 +1,8 @@
 defmodule VsrTest do
   use ExUnit.Case, async: true
 
+  alias TelemetryHelper
+
   setup do
     test_id = :erlang.unique_integer([:positive])
     node1_id = :"replica1_#{test_id}"
@@ -60,15 +62,16 @@ defmodule VsrTest do
 
   test "operations are replicated across cluster", %{replicas: [replica1, replica2, replica3]} do
     # Put on one replica
+    telemetry_ref = TelemetryHelper.expect([:state, :commit_advance])
     assert :ok = Vsr.ListKv.write(replica1, "replicated_key", "replicated_value")
-
-    # Small delay to allow replication
-    Process.sleep(100)
+    TelemetryHelper.wait_for(telemetry_ref)
 
     # Should be available on all replicas
     assert {:ok, "replicated_value"} = Vsr.ListKv.read(replica1, "replicated_key")
     assert {:ok, "replicated_value"} = Vsr.ListKv.read(replica2, "replicated_key")
     assert {:ok, "replicated_value"} = Vsr.ListKv.read(replica3, "replicated_key")
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "delete operations", %{replicas: [replica1 | _]} do
@@ -81,6 +84,9 @@ defmodule VsrTest do
   end
 
   test "concurrent operations maintain consistency", %{replicas: [replica1, replica2, replica3]} do
+    # Set up expectation BEFORE performing operations to avoid race
+    telemetry_ref = TelemetryHelper.expect([:state, :commit_advance])
+
     # Perform concurrent operations
     tasks =
       for i <- 1..10 do
@@ -92,8 +98,8 @@ defmodule VsrTest do
     # Wait for all operations to complete
     Enum.each(tasks, &Task.await/1)
 
-    # Small delay for replication
-    Process.sleep(200)
+    # Wait for last operation to be committed (they're sequential through the primary)
+    TelemetryHelper.wait_for(telemetry_ref, &(&1.new_commit_number >= 10), 500)
 
     # Verify all values are present on all replicas
     for i <- 1..10 do
@@ -104,6 +110,8 @@ defmodule VsrTest do
       assert {:ok, ^expected} = Vsr.ListKv.read(replica2, key)
       assert {:ok, ^expected} = Vsr.ListKv.read(replica3, key)
     end
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "view number starts at 0", %{replicas: [replica1 | _]} do
@@ -115,16 +123,20 @@ defmodule VsrTest do
     initial_state = VsrServer.dump(replica1)
     initial_op = initial_state.op_number
 
+    telemetry_ref = TelemetryHelper.expect([:state, :commit_advance])
     Vsr.ListKv.write(replica1, "test", "value")
-    Process.sleep(50)
+    TelemetryHelper.wait_for(telemetry_ref)
 
     new_state = VsrServer.dump(replica1)
     assert new_state.op_number > initial_op
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "log entries are maintained", %{replicas: [replica1 | _]} do
+    telemetry_ref = TelemetryHelper.expect([:state, :commit_advance])
     Vsr.ListKv.write(replica1, "log_test", "log_value")
-    Process.sleep(50)
+    TelemetryHelper.wait_for(telemetry_ref)
 
     state = VsrServer.dump(replica1)
     log_entries = state.log
@@ -135,6 +147,8 @@ defmodule VsrTest do
     # Most recent entry should contain our operation
     [latest_entry | _] = log_entries
     assert latest_entry.operation == {:write, "log_test", "log_value"}
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "diagnostic: check quorum and primary", %{replicas: [replica1, replica2, replica3]} do
@@ -163,9 +177,9 @@ defmodule VsrTest do
     "Before operation - Op number: #{initial_state.op_number}, Log length: #{length(initial_state.log)}"
 
     # Try a manual client request
+    telemetry_ref = TelemetryHelper.expect([:state, :commit_advance])
     _result = Vsr.ListKv.write(replica1, "debug_key", "debug_value")
-
-    Process.sleep(100)
+    TelemetryHelper.wait_for(telemetry_ref)
 
     final_state = VsrServer.dump(replica1)
 
@@ -175,6 +189,8 @@ defmodule VsrTest do
     if length(final_state.log) > 0 do
       [_latest_entry | _] = final_state.log
     end
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "replicas maintain connected state", %{replicas: [replica1, replica2, replica3]} do
@@ -199,5 +215,66 @@ defmodule VsrTest do
     assert node3_id in state2.replicas
     assert node1_id in state3.replicas
     assert node2_id in state3.replicas
+  end
+
+  test "state machine operation span emits proper telemetry events", %{replicas: [replica1 | _]} do
+    # Manually attach handlers to capture both measurements and metadata
+    test_pid = self()
+    start_handler_id = make_ref()
+    stop_handler_id = make_ref()
+
+    start_handler = fn [:vsr, :state_machine, :operation, :start], measurements, metadata, _ ->
+      send(test_pid, {:span_start, measurements, metadata})
+    end
+
+    stop_handler = fn [:vsr, :state_machine, :operation, :stop], measurements, metadata, _ ->
+      send(test_pid, {:span_stop, measurements, metadata})
+    end
+
+    :telemetry.attach(
+      "span-start-#{inspect(start_handler_id)}",
+      [:vsr, :state_machine, :operation, :start],
+      start_handler,
+      nil
+    )
+
+    :telemetry.attach(
+      "span-stop-#{inspect(stop_handler_id)}",
+      [:vsr, :state_machine, :operation, :stop],
+      stop_handler,
+      nil
+    )
+
+    # Perform an operation that will trigger the span
+    Vsr.ListKv.write(replica1, "span_test", "value")
+
+    # Wait for and verify start event
+    assert_receive {:span_start, start_measurements, start_metadata}
+
+    # Verify start event has proper measurements
+    assert Map.has_key?(start_measurements, :monotonic_time)
+    assert Map.has_key?(start_measurements, :system_time)
+
+    # Verify start event has span context
+    assert Map.has_key?(start_metadata, :telemetry_span_context)
+    assert is_reference(start_metadata.telemetry_span_context)
+
+    # Verify common metadata is present in start event
+    assert Map.has_key?(start_metadata, :node_id)
+    assert Map.has_key?(start_metadata, :view_number)
+
+    # Wait for and verify stop event
+    assert_receive {:span_stop, stop_measurements, stop_metadata}
+
+    # Verify stop event has proper measurements
+    assert Map.has_key?(stop_measurements, :monotonic_time)
+    assert Map.has_key?(stop_measurements, :duration)
+
+    # Verify stop event has span context
+    assert Map.has_key?(stop_metadata, :telemetry_span_context)
+    assert is_reference(stop_metadata.telemetry_span_context)
+
+    :telemetry.detach("span-start-#{inspect(start_handler_id)}")
+    :telemetry.detach("span-stop-#{inspect(stop_handler_id)}")
   end
 end

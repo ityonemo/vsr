@@ -67,7 +67,7 @@ defmodule VsrServerTest do
       assert prepare.commit_number == 0
       assert prepare.from == self()
       assert prepare.leader_id == "n0"
-      
+
       # Verify server is still responsive after testing message structure
       state = VsrServer.dump(server)
       assert is_map(state)
@@ -83,7 +83,7 @@ defmodule VsrServerTest do
       # Verify the commit message has all required fields
       assert commit.view == 0
       assert commit.commit_number == 1
-      
+
       # Verify server state can be inspected
       state = VsrServer.dump(server)
       assert state.commit_number >= 0
@@ -99,7 +99,7 @@ defmodule VsrServerTest do
       # Verify the start view change message has all required fields
       assert start_view_change.view == 1
       assert start_view_change.replica == "n0"
-      
+
       # Verify server maintains view state properly
       state = VsrServer.dump(server)
       assert state.view_number >= 0

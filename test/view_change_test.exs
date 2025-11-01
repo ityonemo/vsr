@@ -16,6 +16,7 @@ defmodule ViewChangeTest do
   alias Vsr.Message.StartViewChangeAck
   alias Vsr.Message.DoViewChange
   alias Vsr.Message.StartView
+  alias TelemetryHelper
 
   setup do
     unique_id = System.unique_integer([:positive])
@@ -79,6 +80,9 @@ defmodule ViewChangeTest do
       assert initial_state.status == :normal
       assert initial_state.view_number == 0
 
+      # Set up expectation before triggering the event
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
+
       # Send StartViewChange message directly via VSR protocol
       start_view_change_msg = %StartViewChange{
         view: 1,
@@ -87,14 +91,16 @@ defmodule ViewChangeTest do
 
       VsrServer.vsr_send(replica1, start_view_change_msg)
 
-      # Give it time to process
-      Process.sleep(50)
+      # Wait for the event with filter for view_change status
+      TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
       # Check state changed
       updated_state = VsrServer.dump(replica1)
       assert updated_state.status == :view_change
       assert updated_state.view_number == 1
       assert updated_state.last_normal_view == 0
+
+      TelemetryHelper.detach(telemetry_ref)
     end
 
     test "ignores StartViewChange with lower view number", %{
@@ -102,18 +108,22 @@ defmodule ViewChangeTest do
       node_ids: [node1_id | _]
     } do
       # First advance to view 2
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg = %StartViewChange{view: 2, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
       # Now try to go back to view 1
       old_view_msg = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, old_view_msg)
-      Process.sleep(50)
+      # Small wait to ensure message was processed (even though it should be ignored)
+      Process.sleep(10)
 
       # Should still be at view 2
       state = VsrServer.dump(replica1)
       assert state.view_number == 2
+
+      TelemetryHelper.detach(telemetry_ref)
     end
   end
 
@@ -123,23 +133,27 @@ defmodule ViewChangeTest do
       node_ids: [node1_id, node2_id, _node3_id]
     } do
       # Put replica1 in view_change status for view 1
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
       # Send StartViewChangeAck from different replicas
+      telemetry_ref2 = TelemetryHelper.expect([:view_change, :vote_received])
       ack1 = %StartViewChangeAck{view: 1, replica: node1_id}
       ack2 = %StartViewChangeAck{view: 1, replica: node2_id}
 
       VsrServer.vsr_send(replica1, ack1)
-      Process.sleep(10)
       VsrServer.vsr_send(replica1, ack2)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref2)
 
       # Check that view_change_votes are being tracked
       state = VsrServer.dump(replica1)
       assert Map.has_key?(state.view_change_votes, 1)
       assert length(Map.get(state.view_change_votes, 1)) >= 2
+
+      TelemetryHelper.detach(telemetry_ref)
+      TelemetryHelper.detach(telemetry_ref2)
     end
 
     test "ignores duplicate acks from same replica", %{
@@ -147,20 +161,25 @@ defmodule ViewChangeTest do
       node_ids: [node1_id | _]
     } do
       # Put in view_change status
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
       # Send same ack twice
+      telemetry_ref2 = TelemetryHelper.expect([:view_change, :vote_received])
       ack = %StartViewChangeAck{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, ack)
       VsrServer.vsr_send(replica1, ack)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref2)
 
       # Should only count once
       state = VsrServer.dump(replica1)
       votes = Map.get(state.view_change_votes, 1, [])
       assert length(votes) == 1
+
+      TelemetryHelper.detach(telemetry_ref)
+      TelemetryHelper.detach(telemetry_ref2)
     end
   end
 
@@ -177,9 +196,10 @@ defmodule ViewChangeTest do
       is_replica1_primary_for_view1 = node1_id == primary_for_view1
 
       # Put replica1 in view_change status for view 1
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
       # Verify replica1 transitioned to view_change status
       state_after_start = VsrServer.dump(replica1)
@@ -187,6 +207,7 @@ defmodule ViewChangeTest do
       assert state_after_start.view_number == 1
 
       # Send DoViewChange message (only processed if replica1 is primary for view 1)
+      telemetry_ref2 = TelemetryHelper.expect([:view_change, :do_view_change, :received])
       do_view_change_msg = %DoViewChange{
         view: 1,
         # Empty log for test
@@ -198,7 +219,7 @@ defmodule ViewChangeTest do
       }
 
       VsrServer.vsr_send(replica1, do_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref2)
 
       # Check that the message was processed (only if replica1 is primary for view 1)
       state = VsrServer.dump(replica1)
@@ -210,6 +231,9 @@ defmodule ViewChangeTest do
         # Just verify no crash occurred
         assert true
       end
+
+      TelemetryHelper.detach(telemetry_ref)
+      TelemetryHelper.detach(telemetry_ref2)
     end
 
     test "transitions to normal status after collecting majority DoViewChange messages", %{
@@ -224,9 +248,10 @@ defmodule ViewChangeTest do
       is_replica1_primary_for_view1 = node1_id == primary_for_view1
 
       # Put replica1 in view_change status for view 1
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
       # Verify replica1 transitioned to view_change status
       state_after_start = VsrServer.dump(replica1)
@@ -235,6 +260,8 @@ defmodule ViewChangeTest do
 
       # Send multiple DoViewChange messages to reach majority (only if replica1 is primary for view 1)
       if is_replica1_primary_for_view1 do
+        telemetry_ref2 = TelemetryHelper.expect([:view_change, :complete])
+
         do_view_change1 = %DoViewChange{
           view: 1,
           log: [],
@@ -255,16 +282,20 @@ defmodule ViewChangeTest do
 
         VsrServer.vsr_send(replica1, do_view_change1)
         VsrServer.vsr_send(replica1, do_view_change2)
-        Process.sleep(100)
+        TelemetryHelper.wait_for(telemetry_ref2)
 
         # Should transition back to normal
         state = VsrServer.dump(replica1)
         assert state.status == :normal
+
+        TelemetryHelper.detach(telemetry_ref2)
       else
         # If replica1 is not primary for view 1, this test doesn't apply
         # Just verify no crash occurred
         assert true
       end
+
+      TelemetryHelper.detach(telemetry_ref)
     end
   end
 
@@ -275,6 +306,7 @@ defmodule ViewChangeTest do
       _initial_state = VsrServer.dump(replica1)
 
       # Send StartView message
+      telemetry_ref = TelemetryHelper.expect([:view_change, :complete])
       start_view_msg = %StartView{
         view: 2,
         # Empty log for test
@@ -284,7 +316,7 @@ defmodule ViewChangeTest do
       }
 
       VsrServer.vsr_send(replica1, start_view_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref)
 
       # Check state was updated
       updated_state = VsrServer.dump(replica1)
@@ -293,26 +325,32 @@ defmodule ViewChangeTest do
       assert updated_state.op_number == 5
       assert updated_state.commit_number == 3
       assert updated_state.view_change_votes == %{}
+
+      TelemetryHelper.detach(telemetry_ref)
     end
 
     test "ignores StartView with lower view number", %{
       replicas: [replica1 | _]
     } do
       # First advance to view 3
+      telemetry_ref = TelemetryHelper.expect([:view_change, :complete])
       start_view_msg1 = %StartView{view: 3, log: [], op_number: 1, commit_number: 1}
       VsrServer.vsr_send(replica1, start_view_msg1)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref)
 
       # Try to go back to view 2
       start_view_msg2 = %StartView{view: 2, log: [], op_number: 2, commit_number: 2}
       VsrServer.vsr_send(replica1, start_view_msg2)
-      Process.sleep(50)
+      # Small wait to ensure message was processed (even though it should be ignored)
+      Process.sleep(10)
 
       # Should still be at view 3
       state = VsrServer.dump(replica1)
       assert state.view_number == 3
       # Should not have changed
       assert state.op_number == 1
+
+      TelemetryHelper.detach(telemetry_ref)
     end
   end
 
@@ -338,16 +376,19 @@ defmodule ViewChangeTest do
       assert not is_primary, "replica3 should not be primary for this test to work"
 
       # Simulate primary inactivity timeout
+      # Wait for the status to change to view_change (indicates view change was initiated)
+      telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       send(replica3, :"$vsr_primary_inactivity_timeout")
-      Process.sleep(100)
+      TelemetryHelper.wait_for(telemetry_ref, fn _ -> true end, 200)
 
-      # TODO: verify that the states have flipped using telemetry.
       # The manual view change triggers a full view change cycle that completes quickly.
       # Replica3 transitions: :normal (view 0) -> :view_change (view 1) -> :normal (view 1)
 
       # Should have incremented view and initiated view change
       updated_state = VsrServer.dump(replica3)
       assert updated_state.view_number > initial_view
+
+      TelemetryHelper.detach(telemetry_ref)
     end
   end
 
@@ -366,6 +407,7 @@ defmodule ViewChangeTest do
       assert state3.status == :normal
 
       # Initiate view change from replica2
+      telemetry_ref = TelemetryHelper.expect([:view_change, :complete])
       start_view_change_msg = %StartViewChange{view: 1, replica: node2_id}
 
       # Send to all replicas
@@ -374,12 +416,10 @@ defmodule ViewChangeTest do
       VsrServer.vsr_send(replica3, start_view_change_msg)
 
       # Wait for view change protocol to complete
-      Process.sleep(200)
+      TelemetryHelper.wait_for(telemetry_ref, fn _ -> true end, 500)
 
-      # TODO: verify that the states have flipped using telemetry.
-      # The view change happens too quickly to observe the intermediate :view_change status.
+      # The view change happens quickly.
       # All replicas transition from :normal (view 0) -> :view_change (view 1) -> :normal (view 1)
-      # within the 200ms sleep period.
 
       state1_after = VsrServer.dump(replica1)
       state2_after = VsrServer.dump(replica2)
@@ -392,6 +432,8 @@ defmodule ViewChangeTest do
 
       assert state1_after.status == :normal
       assert state2_after.status == :normal
+
+      TelemetryHelper.detach(telemetry_ref)
       assert state3_after.status == :normal
     end
 
@@ -400,19 +442,22 @@ defmodule ViewChangeTest do
       node_ids: [node1_id | _]
     } do
       # Do some operations first to build up state
+      telemetry_ref1 = TelemetryHelper.expect([:state, :commit_advance])
       :ok = Vsr.ListKv.write(replica1, "test_key", "test_value")
-      Process.sleep(100)
+      TelemetryHelper.wait_for(telemetry_ref1)
 
       state_before = VsrServer.dump(replica1)
       op_number_before = state_before.op_number
       commit_number_before = state_before.commit_number
 
       # Initiate view change
+      telemetry_ref2 = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref2)
 
       # Simulate receiving StartView (as if we completed view change)
+      telemetry_ref3 = TelemetryHelper.expect([:view_change, :complete])
       start_view_msg = %StartView{
         view: 1,
         # In real scenario, this would preserve the log
@@ -422,13 +467,17 @@ defmodule ViewChangeTest do
       }
 
       VsrServer.vsr_send(replica1, start_view_msg)
-      Process.sleep(50)
+      TelemetryHelper.wait_for(telemetry_ref3)
 
       state_after = VsrServer.dump(replica1)
       assert state_after.op_number == op_number_before
       assert state_after.commit_number == commit_number_before
       assert state_after.status == :normal
       assert state_after.view_number == 1
+
+      TelemetryHelper.detach(telemetry_ref1)
+      TelemetryHelper.detach(telemetry_ref2)
+      TelemetryHelper.detach(telemetry_ref3)
     end
   end
 end

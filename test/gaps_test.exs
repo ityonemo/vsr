@@ -1,6 +1,8 @@
 defmodule GapsTest do
   use ExUnit.Case, async: true
 
+  alias TelemetryHelper
+
   setup do
     # Use unique node IDs for async test isolation
     unique_id = System.unique_integer([:positive])
@@ -41,8 +43,9 @@ defmodule GapsTest do
     # TODO: Implement gap detection and rejection in VSR protocol
 
     # First, do a normal operation
+    telemetry_ref = TelemetryHelper.expect([:state, :commit_advance])
     assert :ok = Vsr.ListKv.write(primary, "key1", "value1")
-    Process.sleep(50)
+    TelemetryHelper.wait_for(telemetry_ref)
 
     # Test that both replicas are responding
     assert Process.alive?(primary)
@@ -50,6 +53,8 @@ defmodule GapsTest do
 
     # Gap detection will be implemented once VSR protocol message handling is complete
     # This test documents the expected behavior
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "should trigger state transfer when gap is detected", %{primary: primary, backup: backup} do

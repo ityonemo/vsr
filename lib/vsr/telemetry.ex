@@ -82,42 +82,94 @@ defmodule Vsr.Telemetry do
   @doc """
   Execute a telemetry event with the given measurements and metadata.
 
+  The event name will automatically have `[:vsr]` prepended to it.
+
+  Common metadata (node_id, view_number, etc.) is automatically extracted
+  from the state and merged with any additional metadata provided.
+
   ## Examples
 
+      # Basic usage
       Vsr.Telemetry.execute(
-        [:vsr, :protocol, :prepare, :sent],
+        [:protocol, :prepare, :sent],
+        state,
+        %{count: 3}
+      )
+      # Becomes: [:vsr, :protocol, :prepare, :sent]
+
+      # With extra metadata
+      Vsr.Telemetry.execute(
+        [:protocol, :prepare, :sent],
+        state,
         %{count: 3},
-        %{node_id: :n1, view: 1}
+        %{custom_field: "value"}
       )
   """
-  @spec execute([atom()], map(), map()) :: :ok
-  def execute(event, measurements \\ %{}, metadata \\ %{}) do
-    :telemetry.execute(event, measurements, metadata)
+  @spec execute([atom()], map(), map(), map()) :: :ok
+  def execute(event, state, measurements, extra_metadata \\ %{}) do
+    metadata = Map.merge(common_metadata(state), extra_metadata)
+    :telemetry.execute([:vsr | event], measurements, metadata)
   end
 
   @doc """
-  Execute a telemetry span for measuring duration of an operation.
+  Execute a telemetry span with proper timing measurements and span context.
 
-  Returns the result of the function and executes start/stop events.
+  The event name will automatically have `[:vsr]` prepended to it.
+  The span will emit both `:start` and `:stop` (or `:exception`) events.
+
+  Common metadata is automatically extracted from state and a unique span context
+  is generated using `make_ref()`.
 
   ## Examples
 
-      Vsr.Telemetry.span(
-        [:vsr, :state_machine, :operation],
-        %{op_number: 1},
+      # Wrap an operation in a telemetry span
+      result = Vsr.Telemetry.span(
+        [:protocol, :client_request],
+        state,
+        %{custom: "metadata"},
         fn ->
-          result = apply_operation(state, operation)
-          {result, %{}}
+          # Do work
+          :ok
         end
       )
+
+  ## Events Emitted
+
+  - `[:vsr, :protocol, :client_request, :start]` - When span begins
+  - `[:vsr, :protocol, :client_request, :stop]` - When span completes successfully
+  - `[:vsr, :protocol, :client_request, :exception]` - When span raises an exception
+
+  ## Measurements
+
+  - `:start` event: `monotonic_time`, `system_time`
+  - `:stop` event: `monotonic_time`, `duration`
+  - `:exception` event: `monotonic_time`, `duration`
+
+  ## Metadata
+
+  All events include:
+  - Common metadata from state (node_id, view_number, etc.)
+  - `telemetry_span_context` - Unique reference for correlating start/stop events
+  - Any additional metadata provided
   """
-  @spec span([atom()], map(), (() -> {result, map()})) :: result when result: term()
-  def span(event_prefix, metadata, func) do
-    :telemetry.span(event_prefix, metadata, func)
+  @spec span([atom()], map(), map(), (-> result)) :: result when result: term()
+  def span(event, state, extra_metadata \\ %{}, fun) do
+    metadata =
+      state
+      |> common_metadata()
+      |> Map.merge(extra_metadata)
+      |> Map.put(:telemetry_span_context, make_ref())
+
+    :telemetry.span([:vsr | event], metadata, fn ->
+      result = fun.()
+      {result, %{}}
+    end)
   end
 
   @doc """
   Build common metadata from VSR state.
+
+  Extracts standard VSR state fields that are commonly included in telemetry events.
   """
   @spec common_metadata(map()) :: map()
   def common_metadata(state) do

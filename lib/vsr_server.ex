@@ -705,17 +705,16 @@ defmodule VsrServer do
 
   defp process_new_client_request(state, operation, from, client_id, request_id) do
     # Emit telemetry event for client request start
-    metadata = %{
-      node_id: state.node_id,
-      view_number: state.view_number,
-      status: state.status,
-      is_primary: true,
-      operation: inspect(operation),
-      client_id: client_id,
-      request_id: request_id
-    }
-
-    Telemetry.execute([:vsr, :protocol, :client_request, :start], %{count: 1}, metadata)
+    Telemetry.execute(
+      [:protocol, :client_request, :start],
+      state,
+      %{count: 1},
+      %{
+        operation: inspect(operation),
+        client_id: client_id,
+        request_id: request_id
+      }
+    )
 
     # Primary processes the operation (we are always primary in this function)
     new_state =
@@ -735,13 +734,10 @@ defmodule VsrServer do
 
     # Emit telemetry for prepare broadcast
     Telemetry.execute(
-      [:vsr, :protocol, :prepare, :sent],
+      [:protocol, :prepare, :sent],
+      new_state,
       %{count: MapSet.size(new_state.replicas)},
-      %{
-        node_id: new_state.node_id,
-        view_number: new_state.view_number,
-        op_number: new_state.op_number
-      }
+      %{}
     )
 
     broadcast(new_state, prepare_msg)
@@ -767,13 +763,12 @@ defmodule VsrServer do
   defp prepare_impl(%Prepare{} = prepare, state) do
     # Emit telemetry for prepare received
     Telemetry.execute(
-      [:vsr, :protocol, :prepare, :received],
+      [:protocol, :prepare, :received],
+      state,
       %{count: 1},
       %{
-        node_id: state.node_id,
-        view_number: state.view_number,
         prepare_view: prepare.view,
-        op_number: prepare.op_number,
+        prepare_op_number: prepare.op_number,
         sender: prepare.leader_id
       }
     )
@@ -889,12 +884,11 @@ defmodule VsrServer do
   defp prepare_ok_impl(%PrepareOk{} = prepare_ok, state) do
     # Emit telemetry for prepare_ok received
     Telemetry.execute(
-      [:vsr, :protocol, :prepare_ok, :received],
+      [:protocol, :prepare_ok, :received],
+      state,
       %{count: 1},
       %{
-        node_id: state.node_id,
-        view_number: state.view_number,
-        op_number: prepare_ok.op_number,
+        prepare_ok_op_number: prepare_ok.op_number,
         from: prepare_ok.replica
       }
     )
@@ -911,13 +905,10 @@ defmodule VsrServer do
   defp commit_impl(%Commit{} = commit, state) do
     # Emit telemetry for commit received
     Telemetry.execute(
-      [:vsr, :protocol, :commit, :received],
+      [:protocol, :commit, :received],
+      state,
       %{count: 1},
-      %{
-        node_id: state.node_id,
-        view_number: state.view_number,
-        commit_number: commit.commit_number
-      }
+      %{received_commit_number: commit.commit_number}
     )
 
     state = reset_primary_inactivity_timer(state)
@@ -933,13 +924,10 @@ defmodule VsrServer do
   defp get_state_impl(%GetState{} = get_state, state) do
     # Emit telemetry for state transfer request received
     Telemetry.execute(
-      [:vsr, :state_transfer, :request_received],
+      [:state_transfer, :request_received],
+      state,
       %{count: 1},
-      %{
-        node_id: state.node_id,
-        view_number: state.view_number,
-        from: get_state.sender
-      }
+      %{from: get_state.sender}
     )
 
     # Optimize state transfer by only sending what the requester actually needs
@@ -970,13 +958,10 @@ defmodule VsrServer do
 
     # Emit telemetry for snapshot sent
     Telemetry.execute(
-      [:vsr, :state_transfer, :snapshot_sent],
+      [:state_transfer, :snapshot_sent],
+      state,
       %{count: 1, entries_count: length(log_entries)},
-      %{
-        node_id: state.node_id,
-        view_number: state.view_number,
-        to: get_state.sender
-      }
+      %{to: get_state.sender}
     )
 
     send_to(state, get_state.sender, new_state_msg)
@@ -986,13 +971,10 @@ defmodule VsrServer do
   defp new_state_impl(%NewState{} = new_state, state) do
     # Emit telemetry for snapshot received
     Telemetry.execute(
-      [:vsr, :state_transfer, :snapshot_received],
+      [:state_transfer, :snapshot_received],
+      state,
       %{count: 1, entries_count: length(new_state.log)},
-      %{
-        node_id: state.node_id,
-        view_number: state.view_number,
-        from: new_state.leader_id
-      }
+      %{from: new_state.leader_id}
     )
 
     # Only accept NewState from the legitimate leader for this view
@@ -1032,11 +1014,10 @@ defmodule VsrServer do
   defp heartbeat_impl(heartbeat, state) do
     # Emit telemetry for heartbeat received
     Telemetry.execute(
-      [:vsr, :timer, :heartbeat_received],
+      [:timer, :heartbeat_received],
+      state,
       %{count: 1},
       %{
-        node_id: state.node_id,
-        view_number: state.view_number,
         heartbeat_view: heartbeat.view,
         from: heartbeat.leader_id
       }
@@ -1061,10 +1042,10 @@ defmodule VsrServer do
     if start_view_change.view > state.view_number do
       # Emit telemetry for view change start
       Telemetry.execute(
-        [:vsr, :view_change, :start],
+        [:view_change, :start],
+        state,
         %{count: 1},
         %{
-          node_id: state.node_id,
           old_view: state.view_number,
           new_view: start_view_change.view,
           old_status: state.status
@@ -1085,13 +1066,12 @@ defmodule VsrServer do
 
       # Emit telemetry for status change
       Telemetry.execute(
-        [:vsr, :state, :status_change],
+        [:state, :status_change],
+        state,
         %{count: 1},
         %{
-          node_id: state.node_id,
           old_status: state.status,
-          new_status: :view_change,
-          view_number: start_view_change.view
+          new_status: :view_change
         }
       )
 
@@ -1132,11 +1112,10 @@ defmodule VsrServer do
 
       # Emit telemetry for vote received
       Telemetry.execute(
-        [:vsr, :view_change, :vote_received],
+        [:view_change, :vote_received],
+        state,
         %{vote_count: vote_count, required: div(state.cluster_size, 2) + 1},
         %{
-          node_id: state.node_id,
-          view_number: ack.view,
           from: ack.replica
         }
       )
@@ -1158,11 +1137,10 @@ defmodule VsrServer do
 
         # Emit telemetry for do_view_change sent
         Telemetry.execute(
-          [:vsr, :view_change, :do_view_change, :sent],
+          [:view_change, :do_view_change, :sent],
+          state,
           %{count: 1},
           %{
-            node_id: state.node_id,
-            view_number: ack.view,
             to: new_primary
           }
         )
@@ -1181,11 +1159,10 @@ defmodule VsrServer do
   defp do_view_change_impl(%DoViewChange{} = do_view_change, state) do
     # Emit telemetry for do_view_change received
     Telemetry.execute(
-      [:vsr, :view_change, :do_view_change, :received],
+      [:view_change, :do_view_change, :received],
+      state,
       %{count: 1},
       %{
-        node_id: state.node_id,
-        view_number: state.view_number,
         from: do_view_change.from
       }
     )
@@ -1294,10 +1271,10 @@ defmodule VsrServer do
     if start_view.view >= state.view_number do
       # Emit telemetry for view change complete
       Telemetry.execute(
-        [:vsr, :view_change, :complete],
+        [:view_change, :complete],
+        state,
         %{count: 1},
         %{
-          node_id: state.node_id,
           old_view: state.view_number,
           new_view: start_view.view,
           old_status: state.status
@@ -1319,10 +1296,10 @@ defmodule VsrServer do
 
       # Emit telemetry for view number change
       Telemetry.execute(
-        [:vsr, :state, :view_change],
+        [:state, :view_change],
+        state,
         %{count: 1},
         %{
-          node_id: state.node_id,
           old_view: state.view_number,
           new_view: start_view.view
         }
@@ -1330,13 +1307,12 @@ defmodule VsrServer do
 
       # Emit telemetry for status change
       Telemetry.execute(
-        [:vsr, :state, :status_change],
+        [:state, :status_change],
+        state,
         %{count: 1},
         %{
-          node_id: state.node_id,
           old_status: state.status,
-          new_status: :normal,
-          view_number: start_view.view
+          new_status: :normal
         }
       )
 
@@ -1447,12 +1423,11 @@ defmodule VsrServer do
     if current_count > div(state.cluster_size, 2) do
       # Emit telemetry for quorum reached
       Telemetry.execute(
-        [:vsr, :replication, :quorum_reached],
+        [:replication, :quorum_reached],
+        state,
         %{count: 1, ack_count: current_count, required: div(state.cluster_size, 2) + 1},
         %{
-          node_id: state.node_id,
-          view_number: state.view_number,
-          op_number: op_number
+          extra_op_number: op_number
         }
       )
 
@@ -1472,12 +1447,11 @@ defmodule VsrServer do
 
       # Emit telemetry for commit sent
       Telemetry.execute(
-        [:vsr, :protocol, :commit, :sent],
+        [:protocol, :commit, :sent],
+        state,
         %{count: MapSet.size(state.replicas)},
         %{
-          node_id: state.node_id,
-          view_number: state.view_number,
-          commit_number: new_commit_number
+          extra_commit_number: new_commit_number
         }
       )
 
@@ -1503,15 +1477,19 @@ defmodule VsrServer do
       {new_inner, operation_results} =
         Enum.reduce(log_entries, {state.inner, []}, fn entry, {inner_acc, results_acc} ->
           # Execute operation with telemetry span
+          metadata =
+            state
+            |> Telemetry.common_metadata()
+            |> Map.merge(%{
+              telemetry_span_context: make_ref(),
+              extra_op_number: entry.op_number,
+              operation: inspect(entry.operation)
+            })
+
           {new_inner, result} =
             :telemetry.span(
               [:vsr, :state_machine, :operation],
-              %{
-                node_id: state.node_id,
-                view_number: state.view_number,
-                op_number: entry.op_number,
-                operation: inspect(entry.operation)
-              },
+              metadata,
               fn ->
                 {new_inner, result} = state.module.handle_commit(entry.operation, inner_acc)
                 {{new_inner, result}, %{}}
@@ -1523,15 +1501,12 @@ defmodule VsrServer do
 
       # Emit telemetry for commit number advancement
       Telemetry.execute(
-        [:vsr, :state, :commit_advance],
+        [:state, :commit_advance],
+        state,
+        %{operations_committed: new_commit_number - old_commit_number},
         %{
           old_commit_number: old_commit_number,
-          new_commit_number: new_commit_number,
-          operations_committed: new_commit_number - old_commit_number
-        },
-        %{
-          node_id: state.node_id,
-          view_number: state.view_number
+          new_commit_number: new_commit_number
         }
       )
 
@@ -1586,12 +1561,11 @@ defmodule VsrServer do
 
     # Emit telemetry for prepare_ok sent
     Telemetry.execute(
-      [:vsr, :protocol, :prepare_ok, :sent],
+      [:protocol, :prepare_ok, :sent],
+      state,
       %{count: 1},
       %{
-        node_id: state.node_id,
-        view_number: prepare.view,
-        op_number: prepare.op_number,
+        extra_op_number: prepare.op_number,
         to: leader_node
       }
     )
@@ -1630,12 +1604,11 @@ defmodule VsrServer do
 
     # Emit telemetry for log append
     Telemetry.execute(
-      [:vsr, :replication, :log_append],
+      [:replication, :log_append],
+      state,
       %{count: 1, log_length: get_log_length(%{state | log: new_log})},
       %{
-        node_id: state.node_id,
-        view_number: entry.view,
-        op_number: entry.op_number
+        extra_op_number: entry.op_number
       }
     )
 
@@ -1825,12 +1798,10 @@ defmodule VsrServer do
 
       # Emit telemetry for heartbeat sent
       Telemetry.execute(
-        [:vsr, :timer, :heartbeat_sent],
+        [:timer, :heartbeat_sent],
+        state,
         %{count: MapSet.size(state.replicas)},
-        %{
-          node_id: state.node_id,
-          view_number: state.view_number
-        }
+        %{}
       )
 
       broadcast(state, heartbeat_msg)
@@ -1845,12 +1816,10 @@ defmodule VsrServer do
     if not primary?(state) and state.status == :normal do
       # Emit telemetry for primary timeout
       Telemetry.execute(
-        [:vsr, :timer, :primary_timeout],
+        [:timer, :primary_timeout],
+        state,
         %{count: 1},
-        %{
-          node_id: state.node_id,
-          view_number: state.view_number
-        }
+        %{}
       )
 
       start_manual_view_change(state)

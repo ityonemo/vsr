@@ -1,6 +1,8 @@
 defmodule SetClusterTest do
   use ExUnit.Case, async: true
 
+  alias TelemetryHelper
+
   test "set_cluster updates cluster configuration" do
     unique_id = System.unique_integer([:positive])
     node_id = :"test_node_#{unique_id}"
@@ -93,9 +95,9 @@ defmodule SetClusterTest do
     node2_id = :"async_node2_#{unique_id}"
     node3_id = :"async_node3_#{unique_id}"
 
+    # set_cluster is async (cast), so we can't wait for a specific event
+    # Just give it a small moment to process
     assert :ok = VsrServer.set_cluster(pid, node_id, [node2_id, node3_id])
-
-    # Give the cast a moment to process
     Process.sleep(10)
 
     # Verify updated state

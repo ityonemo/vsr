@@ -75,7 +75,10 @@ defmodule Vsr.ListKv do
   def handle_commit({:read, key}, state), do: read_impl(key, state)
   def handle_commit({:write, key, value}, state), do: write_impl(key, value, state)
   def handle_commit({:delete, key}, state), do: delete_impl(key, state)
-  def handle_commit({:cas, key, old_value, new_value}, state), do: cas_impl(key, old_value, new_value, state)
+
+  def handle_commit({:cas, key, old_value, new_value}, state),
+    do: cas_impl(key, old_value, new_value, state)
+
   def handle_commit({:test_op, data}, state), do: test_op_impl(data, state)
   def handle_commit(:increment_counter, state), do: increment_counter_impl(state)
 

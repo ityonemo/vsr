@@ -1,6 +1,8 @@
 defmodule HeartbeatTest do
   use ExUnit.Case, async: true
 
+  alias TelemetryHelper
+
   setup do
     # Use unique node IDs for async test isolation
     unique_id = System.unique_integer([:positive])
@@ -91,15 +93,17 @@ defmodule HeartbeatTest do
     # This test documents what should happen but won't work until timers implemented
 
     # Simulate receiving heartbeat
+    telemetry_ref = TelemetryHelper.expect([:timer, :heartbeat_received])
     heartbeat = %Vsr.Message.Heartbeat{}
     VsrServer.vsr_send(replica2, heartbeat)
 
-    # In a proper implementation, this would reset the inactivity timer
-    # For now, just verify the message is handled without crashing
-    Process.sleep(10)
+    # Wait for heartbeat to be processed
+    TelemetryHelper.wait_for(telemetry_ref)
 
     # Replica should still be alive and responding
     assert Process.alive?(replica2), "Replica should handle heartbeat without crashing"
+
+    TelemetryHelper.detach(telemetry_ref)
   end
 
   test "primary sends heartbeats and backup detects primary failure" do
@@ -159,7 +163,8 @@ defmodule HeartbeatTest do
     assert Process.alive?(backup2)
 
     # Let heartbeats run for a bit - primary should send heartbeats
-    Process.sleep(100)
+    telemetry_ref = TelemetryHelper.expect([:timer, :heartbeat_received])
+    TelemetryHelper.wait_for(telemetry_ref, fn _ -> true end, 200)
 
     # All nodes should still be alive after heartbeats
     assert Process.alive?(primary)
@@ -171,7 +176,8 @@ defmodule HeartbeatTest do
     refute Process.alive?(primary)
 
     # Wait for primary inactivity timeout to trigger on backups
-    Process.sleep(250)
+    telemetry_ref2 = TelemetryHelper.expect([:timer, :primary_timeout])
+    TelemetryHelper.wait_for(telemetry_ref2, fn _ -> true end, 500)
 
     # Backups should still be alive despite primary failure
     assert Process.alive?(backup1), "Backup1 should survive primary failure"
@@ -179,5 +185,8 @@ defmodule HeartbeatTest do
 
     # In a full implementation, one of the backups would become the new primary
     # For now, we just verify they don't crash when primary fails
+
+    TelemetryHelper.detach(telemetry_ref)
+    TelemetryHelper.detach(telemetry_ref2)
   end
 end
