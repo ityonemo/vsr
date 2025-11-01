@@ -5,6 +5,354 @@ defmodule VsrServer do
   This module provides a framework for building VSR-enabled services by handling
   all VSR protocol messages while delegating application-specific logic to
   the implementing module.
+
+  ## Overview
+
+  VsrServer implements the core VSR consensus protocol including:
+  - Primary-backup replication with automatic failover
+  - View changes for fault tolerance
+  - Quorum-based consensus decisions
+  - Linearizable operation ordering
+  - Comprehensive telemetry instrumentation
+
+  ## Basic Usage
+
+  To create a VSR-enabled service, you need to implement the VsrServer behaviour
+  and provide three key components:
+
+  1. **State Machine**: Handles application operations
+  2. **Communication Layer**: Routes VSR protocol messages between nodes
+  3. **Optional Configuration**: Cluster size, timeouts, etc.
+
+  ### Minimal Example
+
+  ```elixir
+  defmodule MyKvStore do
+    use VsrServer
+
+    def start_link(opts) do
+      node_id = Keyword.fetch!(opts, :node_id)
+      cluster_size = Keyword.fetch!(opts, :cluster_size)
+
+      VsrServer.start_link(__MODULE__,
+        node_id: node_id,
+        cluster_size: cluster_size
+      )
+    end
+
+    @impl VsrServer
+    def init(vsr_state) do
+      # Initialize your application state
+      my_state = %{vsr: vsr_state, data: %{}}
+      {:ok, my_state}
+    end
+
+    @impl VsrServer
+    def handle_commit(operation, state) do
+      # Apply committed operation to your state machine
+      case operation do
+        {:write, key, value} ->
+          new_data = Map.put(state.data, key, value)
+          new_state = %{state | data: new_data}
+          {new_state, :ok}
+
+        {:read, key} ->
+          result = Map.get(state.data, key, {:error, :not_found})
+          {state, result}
+      end
+    end
+
+    @impl VsrServer
+    def send_reply(from, reply, state) do
+      # Send reply back to client
+      GenServer.reply(from, reply)
+    end
+  end
+  ```
+
+  ## State Machine Implementation
+
+  The state machine handles application-specific operations. You must implement:
+
+  ### Required Callback: handle_commit/2
+
+  ```elixir
+  @callback handle_commit(operation :: term, state :: term) ::
+    {new_state :: term, result :: term}
+  ```
+
+  This callback is invoked when an operation has been committed by the VSR cluster.
+  It should:
+  - Apply the operation to your application state
+  - Return the updated state and operation result
+  - Be deterministic (same operation → same result)
+
+  Example:
+  ```elixir
+  def handle_commit({:increment, key}, state) do
+    current = Map.get(state.counters, key, 0)
+    new_counters = Map.put(state.counters, key, current + 1)
+    new_state = %{state | counters: new_counters}
+    {new_state, {:ok, current + 1}}
+  end
+  ```
+
+  ## Communication Layer Implementation
+
+  The communication layer is implemented via the `send_vsr/3` callback on your
+  module. This callback is invoked whenever VSR needs to send a protocol message
+  to another node.
+
+  ### Default Implementation (Erlang Distribution)
+
+  The `use VsrServer` macro provides a default implementation that works with
+  Erlang distribution using `send/2`:
+
+  ```elixir
+  defmodule MyKvStore do
+    use VsrServer  # Provides default send_vsr implementation
+
+    # ... other callbacks
+  end
+  ```
+
+  The default implementation is:
+
+  ```elixir
+  def send_vsr(destination, message, _inner_state) do
+    send(destination, {:"$vsr", message})
+  end
+  ```
+
+  This works when `node_id` values are:
+  - PIDs (e.g., `self()`)
+  - Registered names (e.g., `:my_server` or `{:global, :my_server}`)
+  - Node names (e.g., `:"node1@localhost"` with registered name)
+
+  ### Custom Communication Protocol
+
+  To use a different transport (HTTP, gRPC, JSON-RPC, etc.), override the
+  `send_vsr/3` callback:
+
+  ```elixir
+  defmodule MyHttpKvStore do
+    use VsrServer
+
+    # Override the default send_vsr to use HTTP
+    @impl VsrServer
+    def send_vsr(dest_node_id, vsr_message, _inner_state) do
+      # Serialize VSR message to JSON
+      json_body = Jason.encode!(%{
+        "type" => message_type(vsr_message),
+        "view" => vsr_message.view,
+        "data" => serialize_message(vsr_message)
+      })
+
+      # Send via HTTP POST to the destination node
+      url = "http://\#{dest_node_id}:8080/vsr"
+      HTTPoison.post(url, json_body, [{"Content-Type", "application/json"}])
+    end
+
+    defp message_type(%Vsr.Message.Prepare{}), do: "prepare"
+    defp message_type(%Vsr.Message.PrepareOk{}), do: "prepare_ok"
+    defp message_type(%Vsr.Message.Commit{}), do: "commit"
+    # ... other message types
+
+    defp serialize_message(%Vsr.Message.Prepare{} = msg) do
+      %{
+        "op_number" => msg.op_number,
+        "operation" => msg.operation,
+        "commit_number" => msg.commit_number,
+        "leader_id" => msg.leader_id
+      }
+    end
+    # ... other serializers
+
+    # ... other callbacks
+  end
+  ```
+
+  When receiving messages via your custom transport, deserialize and deliver to VsrServer:
+
+  ```elixir
+  defmodule MyHttpHandler do
+    def handle_vsr_request(conn) do
+      # Deserialize from JSON
+      {:ok, json} = Jason.decode(conn.body_params)
+      vsr_message = deserialize_vsr_message(json)
+
+      # Deliver to local VsrServer
+      VsrServer.vsr_send(conn.assigns.vsr_server, vsr_message)
+
+      # Send HTTP response
+      send_resp(conn, 200, "ok")
+    end
+
+    defp deserialize_vsr_message(%{"type" => "prepare", "data" => data} = json) do
+      %Vsr.Message.Prepare{
+        view: json["view"],
+        op_number: data["op_number"],
+        operation: data["operation"],
+        commit_number: data["commit_number"],
+        leader_id: data["leader_id"]
+      }
+    end
+
+    # ... deserialize other message types
+  end
+  ```
+
+  The key insight is that `send_vsr/3` only handles **outgoing** messages.
+  **Incoming** messages are delivered via `VsrServer.vsr_send/2` after your
+  custom transport receives and deserializes them.
+
+  ## Client Request Handling
+
+  For client requests, use the `send_reply/3` callback to reply back to clients:
+
+  ```elixir
+  @impl VsrServer
+  def send_reply(from, reply, state) do
+    case from do
+      # Standard GenServer from tuple (Erlang distribution)
+      {pid, ref} when is_pid(pid) and is_reference(ref) ->
+        GenServer.reply(from, reply)
+
+      # Custom from (e.g., HTTP request context)
+      %{conn: conn, request_id: req_id} ->
+        send_http_response(conn, req_id, reply)
+
+      # JSON-RPC from
+      %{"node" => node_id, "from" => client_ref} ->
+        send_json_rpc_reply(node_id, client_ref, reply)
+    end
+  end
+  ```
+
+  ## Client Request Deduplication
+
+  VsrServer provides automatic deduplication for client requests using
+  `client_id` and `request_id`:
+
+  ```elixir
+  # In your client API
+  def write(vsr_pid, key, value) do
+    client_id = :my_client_1
+    request_id = System.unique_integer([:positive])
+
+    VsrServer.client_request(vsr_pid,
+      {:write, key, value},
+      client_id: client_id,
+      request_id: request_id
+    )
+  end
+  ```
+
+  Multiple identical requests (same `client_id` and `request_id`) will:
+  - Be processed once
+  - All waiting callers receive the same result
+  - Prevent duplicate operations
+
+  ## Configuration Options
+
+  When starting VsrServer, you can configure:
+
+  ```elixir
+  VsrServer.start_link(MyModule,
+    # Required
+    node_id: :node1,                    # Unique identifier for this node
+    cluster_size: 3,                     # Total number of replicas
+
+    # Optional
+    replicas: [:node2, :node3],          # Other replica node IDs (auto-computed if not provided)
+    heartbeat_interval: 100,             # Primary heartbeat interval (ms)
+    heartbeat_timeout: 500,              # Backup timeout for primary failure (ms)
+    name: {:global, :my_vsr_server}      # GenServer registration
+  )
+  ```
+
+  ## Complete Example: Maelstrom Integration
+
+  See `maelstrom-adapter/` directory for a complete example of implementing
+  VSR with a custom JSON-based protocol for Jepsen Maelstrom testing.
+
+  Key components:
+  - `Maelstrom.Kv` - State machine implementation with custom `send_vsr/3`
+  - `Maelstrom.Message` - JSON message serialization
+  - `Maelstrom.Stdio` - STDIN/STDOUT message handling
+
+  This demonstrates a complete custom transport implementation without using
+  Erlang distribution.
+
+  ## Telemetry Events
+
+  VsrServer emits comprehensive telemetry events for monitoring and debugging.
+  See `Vsr.Telemetry` module documentation for complete event reference.
+
+  Example telemetry handler:
+
+  ```elixir
+  :telemetry.attach_many(
+    "vsr-logger",
+    [
+      [:vsr, :state, :commit_advance],
+      [:vsr, :view_change, :complete],
+      [:vsr, :leadership, :start]
+    ],
+    &handle_vsr_event/4,
+    nil
+  )
+
+  def handle_vsr_event(event_name, measurements, metadata, _config) do
+    Logger.info("VSR Event: \#{inspect(event_name)}")
+  end
+  ```
+
+  ## Error Handling
+
+  VsrServer follows "let it crash" philosophy:
+  - Invalid messages crash the GenServer (supervised recovery)
+  - Network failures are handled by retries/timeouts
+  - State machine errors crash and require supervisor restart
+
+  For graceful error handling in your state machine:
+
+  ```elixir
+  def handle_commit(operation, state) do
+    case validate_operation(operation) do
+      :ok ->
+        # Process operation
+        {new_state, result}
+
+      {:error, reason} ->
+        # Return error result, state unchanged
+        {state, {:error, reason}}
+    end
+  end
+  ```
+
+  ## Testing
+
+  For testing, you can use synchronous operations and inspect state:
+
+  ```elixir
+  test "writes are replicated" do
+    {:ok, replica1} = start_replica(:r1, 3)
+    {:ok, replica2} = start_replica(:r2, 3)
+    {:ok, replica3} = start_replica(:r3, 3)
+
+    # Perform operation
+    result = VsrServer.client_request(replica1, {:write, "key", "value"})
+    assert result == :ok
+
+    # Check state is replicated
+    state1 = VsrServer.dump(replica1)
+    state2 = VsrServer.dump(replica2)
+
+    assert state1.inner.data["key"] == "value"
+    assert state2.inner.data["key"] == "value"
+  end
+  ```
   """
 
   use GenServer

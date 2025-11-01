@@ -10,7 +10,29 @@ defmodule Vsr.MixProject do
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
       elixirc_options: elixirc_options(Mix.env()),
-      aliases: aliases()
+      aliases: aliases(),
+      description: description(),
+      package: package(),
+      source_url: "https://github.com/ityonemo/vsr"
+    ]
+  end
+
+  defp description do
+    """
+    Viewstamped Replication (VSR) consensus protocol implementation for Elixir.
+    Provides fault-tolerant state machine replication with automatic failure recovery,
+    primary-backup replication, and comprehensive telemetry instrumentation.
+    """
+  end
+
+  defp package do
+    [
+      name: "vsr",
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => "https://github.com/ityonemo/vsr"
+      },
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -51,7 +73,6 @@ defmodule Vsr.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:protoss, "~> 1.1"},
       {:telemetry, "~> 1.0"},
       {:mox, "~> 1.0", only: :test}
     ] ++ mcp_tools()
