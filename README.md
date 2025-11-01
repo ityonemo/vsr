@@ -64,11 +64,77 @@ result = VsrKv.get(replica, "key")  # Returns "value"
 
 ## Testing
 
+### Unit Tests
+
 ```bash
 mix test
 ```
 
 **Test Status**: 106/106 tests passing
+
+### Jepsen Maelstrom Testing
+
+VSR includes integration with [Jepsen Maelstrom](https://github.com/jepsen-io/maelstrom), a workbench for learning distributed systems by writing your own implementations and testing them against fault injection.
+
+#### Download Maelstrom
+
+1. Download the latest Maelstrom release:
+   ```bash
+   wget https://github.com/jepsen-io/maelstrom/releases/download/v0.2.3/maelstrom.tar.bz2
+   tar -xjf maelstrom.tar.bz2
+   ```
+
+2. Or use the provided script to download and extract:
+   ```bash
+   curl -L https://github.com/jepsen-io/maelstrom/releases/download/v0.2.3/maelstrom.tar.bz2 | tar -xj
+   ```
+
+#### Run Maelstrom Tests
+
+The repository includes a convenience script for running linearizable key-value tests:
+
+```bash
+./maelstrom-kv
+```
+
+This runs the `lin-kv` workload which tests:
+- Linearizable key-value operations (read, write, cas)
+- Fault tolerance with network partitions
+- Consistency under concurrent operations
+
+#### Manual Maelstrom Testing
+
+You can also run Maelstrom tests manually:
+
+```bash
+cd maelstrom
+java -jar maelstrom.jar test \
+  -w lin-kv \
+  --bin ../run-vsr-node \
+  --node-count 3 \
+  --time-limit 10 \
+  --concurrency 6
+```
+
+**Workload Options:**
+- `lin-kv` - Linearizable key-value store (read, write, cas operations)
+- `--node-count` - Number of VSR replicas to run
+- `--time-limit` - Duration of test in seconds
+- `--concurrency` - Number of concurrent client operations
+
+#### Interpreting Results
+
+After a test run, check:
+
+1. **Test results**: Maelstrom will report if linearizability was maintained
+2. **Logs**: Found in `store/lin-kv/latest/`
+   - `jepsen.log` - Test runner logs and errors
+   - `node-logs/n*.log` - Individual node logs
+
+**Success criteria:**
+- All operations must satisfy linearizability
+- Minimal network timeouts (some expected during partitions)
+- No crashes or protocol violations
 
 ## Architecture
 
