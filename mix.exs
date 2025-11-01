@@ -9,9 +9,10 @@ defmodule Vsr.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      elixirc_options: elixirc_options(Mix.env()),
       aliases: [
-        tidewave:
-          "run --no-halt -e 'Logger.configure(level: :debug); Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'"
+        mcps:
+          "run --no-halt -e 'Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000); Bandit.start_link(plug: Codicil.Plug, port: 4700) end)'",
       ]
     ]
   end
@@ -27,7 +28,7 @@ defmodule Vsr.MixProject do
 
       _ ->
         [
-          extra_applications: [:logger]
+          extra_applications: [:logger, :runtime_tools]
         ]
     end
   end
@@ -36,14 +37,18 @@ defmodule Vsr.MixProject do
   def elixirc_paths(:maelstrom), do: ["lib", "maelstrom-adapter", "test/_support"]
   def elixirc_paths(_), do: ["lib"]
 
+  defp elixirc_options(_env), do: []
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:protoss, "~> 1.1"},
+      {:telemetry, "~> 1.0"},
       {:mox, "~> 1.0", only: :test},
       # MCP TOOLS
       {:tidewave, "~> 0.4", only: :dev},
-      {:bandit, "~> 1.0", only: :dev}
+      {:bandit, "~> 1.0", only: [:dev, :test]},
+      {:codicil, path: "../codicil", only: [:dev, :test]}, # "~> 0.2", only: [:dev, :test]}
     ]
   end
 end

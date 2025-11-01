@@ -10,6 +10,7 @@ defmodule VsrServer do
   use GenServer
   require Logger
 
+  alias Vsr.Telemetry
   alias Vsr.Message.ClientRequest
   alias Vsr.Message.Prepare
   alias Vsr.Message.PrepareOk
@@ -645,55 +646,56 @@ defmodule VsrServer do
     # Handle this gracefully by checking current primary status and forwarding if needed.
     if not primary?(state) do
       primary_node = primary(state)
+
       client_request = %ClientRequest{
         operation: operation,
         from: from,
         client_id: client_id,
         request_id: request_id
       }
+
       send_to(state, primary_node, client_request)
       {:noreply, state}
     else
+      cond do
+        state.status != :normal ->
+          maybe_send_reply({:error, :not_primary}, from, state)
+          {:noreply, state}
 
-    cond do
-      state.status != :normal ->
-        maybe_send_reply({:error, :not_primary}, from, state)
-        {:noreply, state}
+        not quorum?(state) ->
+          maybe_send_reply({:error, :no_quorum}, from, state)
+          {:noreply, state}
 
-      not quorum?(state) ->
-        maybe_send_reply({:error, :no_quorum}, from, state)
-        {:noreply, state}
+        # Client deduplication: check if we've seen this request before
+        client_id && request_id ->
+          case Map.fetch(state.client_table, client_id) do
+            :error ->
+              # First request from this client - process normally
+              process_new_client_request(state, operation, from, client_id, request_id)
 
-      # Client deduplication: check if we've seen this request before
-      client_id && request_id ->
-        case Map.fetch(state.client_table, client_id) do
-          :error ->
-            # First request from this client - process normally
-            process_new_client_request(state, operation, from, client_id, request_id)
+            {:ok, client_entry} when request_id > client_entry_request_id(client_entry) ->
+              # Newer request from same client - process and update cache
+              process_new_client_request(state, operation, from, client_id, request_id)
 
-          {:ok, client_entry} when request_id > client_entry_request_id(client_entry) ->
-            # Newer request from same client - process and update cache
-            process_new_client_request(state, operation, from, client_id, request_id)
+            {:ok, {:cached, ^request_id, cached_result}} ->
+              maybe_send_reply(cached_result, from, state)
+              {:noreply, state}
 
-          {:ok, {:cached, ^request_id, cached_result}} ->
-            maybe_send_reply(cached_result, from, state)
-            {:noreply, state}
+            {:ok, {:cached, cached_request_id, _cached_result}}
+            when request_id < cached_request_id ->
+              # Older request - drop without reply (client should have already received response)
+              {:noreply, state}
 
-          {:ok, {:cached, cached_request_id, _cached_result}}
-          when request_id < cached_request_id ->
-            # Older request - drop without reply (client should have already received response)
-            {:noreply, state}
+            _ ->
+              # Request is still processing - duplicate request starves waiting for original to complete
+              # TODO: Implement waiter list to support concurrent duplicate requests getting same reply
+              {:noreply, state}
+          end
 
-          _ ->
-            # Request is still processing - duplicate request starves waiting for original to complete
-            # TODO: Implement waiter list to support concurrent duplicate requests getting same reply
-            {:noreply, state}
-        end
-
-      :else ->
-        # No client deduplication info - process normally (backwards compatibility)
-        process_new_client_request(state, operation, from, client_id, request_id)
-    end
+        :else ->
+          # No client deduplication info - process normally (backwards compatibility)
+          process_new_client_request(state, operation, from, client_id, request_id)
+      end
     end
   end
 
@@ -702,6 +704,19 @@ defmodule VsrServer do
   end
 
   defp process_new_client_request(state, operation, from, client_id, request_id) do
+    # Emit telemetry event for client request start
+    metadata = %{
+      node_id: state.node_id,
+      view_number: state.view_number,
+      status: state.status,
+      is_primary: true,
+      operation: inspect(operation),
+      client_id: client_id,
+      request_id: request_id
+    }
+
+    Telemetry.execute([:vsr, :protocol, :client_request, :start], %{count: 1}, metadata)
+
     # Primary processes the operation (we are always primary in this function)
     new_state =
       state
@@ -717,6 +732,17 @@ defmodule VsrServer do
       from: from,
       leader_id: new_state.node_id
     }
+
+    # Emit telemetry for prepare broadcast
+    Telemetry.execute(
+      [:vsr, :protocol, :prepare, :sent],
+      %{count: MapSet.size(new_state.replicas)},
+      %{
+        node_id: new_state.node_id,
+        view_number: new_state.view_number,
+        op_number: new_state.op_number
+      }
+    )
 
     broadcast(new_state, prepare_msg)
 
@@ -739,6 +765,19 @@ defmodule VsrServer do
   end
 
   defp prepare_impl(%Prepare{} = prepare, state) do
+    # Emit telemetry for prepare received
+    Telemetry.execute(
+      [:vsr, :protocol, :prepare, :received],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        prepare_view: prepare.view,
+        op_number: prepare.op_number,
+        sender: prepare.leader_id
+      }
+    )
+
     state = reset_primary_inactivity_timer(state)
     log_length = get_log_length(state)
 
@@ -788,7 +827,7 @@ defmodule VsrServer do
       prepare.op_number <= log_length ->
         # Check if existing log entry matches to detect conflicts
         case state.module.log_fetch(state.log, prepare.op_number) do
-          {:ok, %LogEntry{view: view, operation: operation}} 
+          {:ok, %LogEntry{view: view, operation: operation}}
           when view == prepare.view and operation == prepare.operation ->
             # Exact match - idempotent ACK
             send_prepare_ok(state, prepare)
@@ -805,7 +844,8 @@ defmodule VsrServer do
               primary_node = prepare.leader_id || primary(state)
 
               get_state_msg = %GetState{
-                view: prepare.view,  # Use leader's view, not our stale view
+                # Use leader's view, not our stale view
+                view: prepare.view,
                 op_number: state.op_number,
                 sender: state.node_id
               }
@@ -841,11 +881,24 @@ defmodule VsrServer do
         Logger.debug(
           "Gap detected: received op #{prepare.op_number}, expected #{log_length + 1}, ignoring"
         )
+
         {:noreply, state}
     end
   end
 
   defp prepare_ok_impl(%PrepareOk{} = prepare_ok, state) do
+    # Emit telemetry for prepare_ok received
+    Telemetry.execute(
+      [:vsr, :protocol, :prepare_ok, :received],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        op_number: prepare_ok.op_number,
+        from: prepare_ok.replica
+      }
+    )
+
     if primary?(state) and prepare_ok.view == state.view_number do
       new_state = increment_ok_count(state, prepare_ok.op_number)
       final_state = maybe_commit_operation(new_state, prepare_ok.op_number)
@@ -856,6 +909,17 @@ defmodule VsrServer do
   end
 
   defp commit_impl(%Commit{} = commit, state) do
+    # Emit telemetry for commit received
+    Telemetry.execute(
+      [:vsr, :protocol, :commit, :received],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        commit_number: commit.commit_number
+      }
+    )
+
     state = reset_primary_inactivity_timer(state)
 
     if commit.view == state.view_number and commit.commit_number > state.commit_number do
@@ -867,19 +931,33 @@ defmodule VsrServer do
   end
 
   defp get_state_impl(%GetState{} = get_state, state) do
+    # Emit telemetry for state transfer request received
+    Telemetry.execute(
+      [:vsr, :state_transfer, :request_received],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        from: get_state.sender
+      }
+    )
+
     # Optimize state transfer by only sending what the requester actually needs
     # If they specify a starting op_number, send from there; otherwise send everything
-    log_entries = case Map.get(get_state, :from_op_number) do
-      nil -> 
-        # Legacy behavior - send everything (for compatibility)
-        get_all_log_entries(state)
-      from_op when is_integer(from_op) and from_op > 0 ->
-        # Send only entries from the requested point onwards
-        log_get_from(state, from_op)
-      _ ->
-        # Invalid from_op_number - send everything as fallback
-        get_all_log_entries(state)
-    end
+    log_entries =
+      case Map.get(get_state, :from_op_number) do
+        nil ->
+          # Legacy behavior - send everything (for compatibility)
+          get_all_log_entries(state)
+
+        from_op when is_integer(from_op) and from_op > 0 ->
+          # Send only entries from the requested point onwards
+          log_get_from(state, from_op)
+
+        _ ->
+          # Invalid from_op_number - send everything as fallback
+          get_all_log_entries(state)
+      end
 
     new_state_msg = %NewState{
       view: state.view_number,
@@ -890,11 +968,33 @@ defmodule VsrServer do
       leader_id: state.node_id
     }
 
+    # Emit telemetry for snapshot sent
+    Telemetry.execute(
+      [:vsr, :state_transfer, :snapshot_sent],
+      %{count: 1, entries_count: length(log_entries)},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        to: get_state.sender
+      }
+    )
+
     send_to(state, get_state.sender, new_state_msg)
     {:noreply, state}
   end
 
   defp new_state_impl(%NewState{} = new_state, state) do
+    # Emit telemetry for snapshot received
+    Telemetry.execute(
+      [:vsr, :state_transfer, :snapshot_received],
+      %{count: 1, entries_count: length(new_state.log)},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        from: new_state.leader_id
+      }
+    )
+
     # Only accept NewState from the legitimate leader for this view
     expected_leader = primary_for_view(new_state.view, state)
 
@@ -916,9 +1016,11 @@ defmodule VsrServer do
       final_state = apply_committed_operations(final_state, final_state.commit_number)
 
       # Clear per-view counters after state transfer
-      final_state = %{final_state | 
-        prepare_ok_count: clear_old_view_acks(final_state.prepare_ok_count, final_state.view_number),
-        view_change_votes: %{}
+      final_state = %{
+        final_state
+        | prepare_ok_count:
+            clear_old_view_acks(final_state.prepare_ok_count, final_state.view_number),
+          view_change_votes: %{}
       }
 
       {:noreply, final_state}
@@ -928,6 +1030,18 @@ defmodule VsrServer do
   end
 
   defp heartbeat_impl(heartbeat, state) do
+    # Emit telemetry for heartbeat received
+    Telemetry.execute(
+      [:vsr, :timer, :heartbeat_received],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        heartbeat_view: heartbeat.view,
+        from: heartbeat.leader_id
+      }
+    )
+
     # Only reset primary inactivity timer if heartbeat is from current view and correct leader
     if heartbeat.view == state.view_number and heartbeat.leader_id == primary(state) do
       new_state = reset_primary_inactivity_timer(state)
@@ -945,6 +1059,18 @@ defmodule VsrServer do
   # View change implementations
   defp start_view_change_impl(%StartViewChange{} = start_view_change, state) do
     if start_view_change.view > state.view_number do
+      # Emit telemetry for view change start
+      Telemetry.execute(
+        [:vsr, :view_change, :start],
+        %{count: 1},
+        %{
+          node_id: state.node_id,
+          old_view: state.view_number,
+          new_view: start_view_change.view,
+          old_status: state.status
+        }
+      )
+
       # Transition to view change status and clear old ACK counts
       cleared_prepare_ok_count =
         clear_old_view_acks(state.prepare_ok_count, start_view_change.view)
@@ -956,6 +1082,18 @@ defmodule VsrServer do
           last_normal_view: state.view_number,
           prepare_ok_count: cleared_prepare_ok_count
       }
+
+      # Emit telemetry for status change
+      Telemetry.execute(
+        [:vsr, :state, :status_change],
+        %{count: 1},
+        %{
+          node_id: state.node_id,
+          old_status: state.status,
+          new_status: :view_change,
+          view_number: start_view_change.view
+        }
+      )
 
       # Broadcast START-VIEW-CHANGE-ACK to ALL replicas
       ack_msg = %StartViewChangeAck{
@@ -992,6 +1130,17 @@ defmodule VsrServer do
       # Check if we have enough votes to proceed from cluster
       vote_count = length(updated_votes)
 
+      # Emit telemetry for vote received
+      Telemetry.execute(
+        [:vsr, :view_change, :vote_received],
+        %{vote_count: vote_count, required: div(state.cluster_size, 2) + 1},
+        %{
+          node_id: state.node_id,
+          view_number: ack.view,
+          from: ack.replica
+        }
+      )
+
       # Only send DO-VIEW-CHANGE once when we first reach majority
       if vote_count > div(state.cluster_size, 2) and
            length(existing_votes) <= div(state.cluster_size, 2) do
@@ -1007,6 +1156,17 @@ defmodule VsrServer do
           from: state.node_id
         }
 
+        # Emit telemetry for do_view_change sent
+        Telemetry.execute(
+          [:vsr, :view_change, :do_view_change, :sent],
+          %{count: 1},
+          %{
+            node_id: state.node_id,
+            view_number: ack.view,
+            to: new_primary
+          }
+        )
+
         send_to(state, new_primary, do_view_change_msg)
 
         {:noreply, new_state}
@@ -1019,6 +1179,17 @@ defmodule VsrServer do
   end
 
   defp do_view_change_impl(%DoViewChange{} = do_view_change, state) do
+    # Emit telemetry for do_view_change received
+    Telemetry.execute(
+      [:vsr, :view_change, :do_view_change, :received],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: state.view_number,
+        from: do_view_change.from
+      }
+    )
+
     # Check if this node is the primary for the view in the DoViewChange message
     is_primary_for_view = state.node_id == primary_for_view(do_view_change.view, state)
 
@@ -1121,6 +1292,18 @@ defmodule VsrServer do
 
   defp start_view_impl(%StartView{} = start_view, state) do
     if start_view.view >= state.view_number do
+      # Emit telemetry for view change complete
+      Telemetry.execute(
+        [:vsr, :view_change, :complete],
+        %{count: 1},
+        %{
+          node_id: state.node_id,
+          old_view: state.view_number,
+          new_view: start_view.view,
+          old_status: state.status
+        }
+      )
+
       # Update state with new view information and clear old ACK counts
       cleared_prepare_ok_count = clear_old_view_acks(state.prepare_ok_count, start_view.view)
 
@@ -1133,6 +1316,29 @@ defmodule VsrServer do
           view_change_votes: %{},
           prepare_ok_count: cleared_prepare_ok_count
       }
+
+      # Emit telemetry for view number change
+      Telemetry.execute(
+        [:vsr, :state, :view_change],
+        %{count: 1},
+        %{
+          node_id: state.node_id,
+          old_view: state.view_number,
+          new_view: start_view.view
+        }
+      )
+
+      # Emit telemetry for status change
+      Telemetry.execute(
+        [:vsr, :state, :status_change],
+        %{count: 1},
+        %{
+          node_id: state.node_id,
+          old_status: state.status,
+          new_status: :normal,
+          view_number: start_view.view
+        }
+      )
 
       # Replace log with start_view log
       updated_state = replace_log(new_state, start_view.log)
@@ -1150,7 +1356,6 @@ defmodule VsrServer do
       {:noreply, state}
     end
   end
-
 
   defp start_manual_view_change(state) do
     # Increment view and transition to view change status
@@ -1240,6 +1445,17 @@ defmodule VsrServer do
     # Note: removed quorum?(state) check - it was always true
     # Use cluster_size for consistent quorum calculation
     if current_count > div(state.cluster_size, 2) do
+      # Emit telemetry for quorum reached
+      Telemetry.execute(
+        [:vsr, :replication, :quorum_reached],
+        %{count: 1, ack_count: current_count, required: div(state.cluster_size, 2) + 1},
+        %{
+          node_id: state.node_id,
+          view_number: state.view_number,
+          op_number: op_number
+        }
+      )
+
       # Commit advancement: Safe to advance commit_number directly to op_number
       # since VSR's "append only at log_length + 1" rule ensures same majority
       # has accepted all operations ≤ op_number due to sequential ordering
@@ -1253,6 +1469,17 @@ defmodule VsrServer do
         view: state.view_number,
         commit_number: new_commit_number
       }
+
+      # Emit telemetry for commit sent
+      Telemetry.execute(
+        [:vsr, :protocol, :commit, :sent],
+        %{count: MapSet.size(state.replicas)},
+        %{
+          node_id: state.node_id,
+          view_number: state.view_number,
+          commit_number: new_commit_number
+        }
+      )
 
       broadcast(new_state, commit_msg)
 
@@ -1270,13 +1497,43 @@ defmodule VsrServer do
 
   defp apply_committed_operations(state, new_commit_number) do
     if new_commit_number > state.commit_number do
+      old_commit_number = state.commit_number
       log_entries = get_log_entries_range(state, state.commit_number + 1, new_commit_number)
 
       {new_inner, operation_results} =
         Enum.reduce(log_entries, {state.inner, []}, fn entry, {inner_acc, results_acc} ->
-          {new_inner, result} = state.module.handle_commit(entry.operation, inner_acc)
+          # Execute operation with telemetry span
+          {new_inner, result} =
+            :telemetry.span(
+              [:vsr, :state_machine, :operation],
+              %{
+                node_id: state.node_id,
+                view_number: state.view_number,
+                op_number: entry.op_number,
+                operation: inspect(entry.operation)
+              },
+              fn ->
+                {new_inner, result} = state.module.handle_commit(entry.operation, inner_acc)
+                {{new_inner, result}, %{}}
+              end
+            )
+
           {new_inner, [{entry.op_number, result, entry.sender_id} | results_acc]}
         end)
+
+      # Emit telemetry for commit number advancement
+      Telemetry.execute(
+        [:vsr, :state, :commit_advance],
+        %{
+          old_commit_number: old_commit_number,
+          new_commit_number: new_commit_number,
+          operations_committed: new_commit_number - old_commit_number
+        },
+        %{
+          node_id: state.node_id,
+          view_number: state.view_number
+        }
+      )
 
       # Update client_table with results for deduplication
       updated_client_table =
@@ -1327,6 +1584,18 @@ defmodule VsrServer do
       replica: state.node_id
     }
 
+    # Emit telemetry for prepare_ok sent
+    Telemetry.execute(
+      [:vsr, :protocol, :prepare_ok, :sent],
+      %{count: 1},
+      %{
+        node_id: state.node_id,
+        view_number: prepare.view,
+        op_number: prepare.op_number,
+        to: leader_node
+      }
+    )
+
     send_to(state, leader_node, prepare_ok)
   end
 
@@ -1358,6 +1627,18 @@ defmodule VsrServer do
 
   defp append_log_entry(state, entry) do
     new_log = log_append(state, entry)
+
+    # Emit telemetry for log append
+    Telemetry.execute(
+      [:vsr, :replication, :log_append],
+      %{count: 1, log_length: get_log_length(%{state | log: new_log})},
+      %{
+        node_id: state.node_id,
+        view_number: entry.view,
+        op_number: entry.op_number
+      }
+    )
+
     # Initialize ACK count for this {view, op_number}
     key = {state.view_number, entry.op_number}
     new_prepare_ok_count = Map.put(state.prepare_ok_count, key, 1)
@@ -1380,7 +1661,6 @@ defmodule VsrServer do
     |> Enum.sort_by(& &1.op_number)
   end
 
-
   defp replace_log(state, entries) do
     new_log = log_replace(state, entries)
     %{state | log: new_log}
@@ -1389,8 +1669,8 @@ defmodule VsrServer do
   defp replace_log_entry_at(state, entry, op_number) do
     # Replace the entry at a specific position
     current_entries = get_all_log_entries(state)
-    
-    updated_entries = 
+
+    updated_entries =
       current_entries
       |> Enum.map(fn existing_entry ->
         if existing_entry.op_number == op_number do
@@ -1399,7 +1679,7 @@ defmodule VsrServer do
           existing_entry
         end
       end)
-    
+
     replace_log(state, updated_entries)
   end
 
@@ -1543,6 +1823,16 @@ defmodule VsrServer do
         leader_id: state.node_id
       }
 
+      # Emit telemetry for heartbeat sent
+      Telemetry.execute(
+        [:vsr, :timer, :heartbeat_sent],
+        %{count: MapSet.size(state.replicas)},
+        %{
+          node_id: state.node_id,
+          view_number: state.view_number
+        }
+      )
+
       broadcast(state, heartbeat_msg)
       new_state = start_heartbeat_timer(state)
       {:noreply, new_state}
@@ -1553,6 +1843,16 @@ defmodule VsrServer do
 
   def handle_info(:"$vsr_primary_inactivity_timeout", state) do
     if not primary?(state) and state.status == :normal do
+      # Emit telemetry for primary timeout
+      Telemetry.execute(
+        [:vsr, :timer, :primary_timeout],
+        %{count: 1},
+        %{
+          node_id: state.node_id,
+          view_number: state.view_number
+        }
+      )
+
       start_manual_view_change(state)
     else
       {:noreply, state}
