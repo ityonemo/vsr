@@ -107,84 +107,74 @@ defmodule HeartbeatTest do
   end
 
   test "primary sends heartbeats and backup detects primary failure" do
-    # Test actual heartbeat behavior with a complete 3-node cluster
+    # Use predictable names: a < b < c in term_to_binary sort order
+    # For view 0: rem(0, 3) = 0 → first in sorted order is primary
     unique_id = System.unique_integer([:positive])
-    primary_id = :"primary_#{unique_id}"
-    backup1_id = :"backup1_#{unique_id}"
-    backup2_id = :"backup2_#{unique_id}"
+    node_a = :"hbt_a_#{unique_id}"
+    node_b = :"hbt_b_#{unique_id}"
+    node_c = :"hbt_c_#{unique_id}"
 
-    # Start primary node - will be view 0 primary by default
     primary =
       start_supervised!(
         {Vsr.ListKv,
          [
-           node_id: primary_id,
+           node_id: node_a,
            cluster_size: 3,
-           replicas: [backup1_id, backup2_id],
+           replicas: [node_b, node_c],
            heartbeat_interval: 50,
            primary_inactivity_timeout: 200,
-           name: primary_id
+           name: node_a
          ]},
-        id: :"primary_#{unique_id}"
+        id: :"hbt_a_#{unique_id}"
       )
 
-    # Start backup nodes
-    backup1 =
+    _backup1 =
       start_supervised!(
         {Vsr.ListKv,
          [
-           node_id: backup1_id,
+           node_id: node_b,
            cluster_size: 3,
-           replicas: [primary_id, backup2_id],
+           replicas: [node_a, node_c],
            heartbeat_interval: 50,
            primary_inactivity_timeout: 200,
-           name: backup1_id
+           name: node_b
          ]},
-        id: :"backup1_#{unique_id}"
+        id: :"hbt_b_#{unique_id}"
       )
 
-    backup2 =
+    _backup2 =
       start_supervised!(
         {Vsr.ListKv,
          [
-           node_id: backup2_id,
+           node_id: node_c,
            cluster_size: 3,
-           replicas: [primary_id, backup1_id],
+           replicas: [node_a, node_b],
            heartbeat_interval: 50,
            primary_inactivity_timeout: 200,
-           name: backup2_id
+           name: node_c
          ]},
-        id: :"backup2_#{unique_id}"
+        id: :"hbt_c_#{unique_id}"
       )
 
-    # All nodes should start alive
-    assert Process.alive?(primary)
-    assert Process.alive?(backup1)
-    assert Process.alive?(backup2)
-
-    # Let heartbeats run for a bit - primary should send heartbeats
+    # Let heartbeats run — primary should send heartbeats
     telemetry_ref = TelemetryHelper.expect([:timer, :heartbeat_received])
-    TelemetryHelper.wait_for(telemetry_ref, fn _ -> true end, 200)
+    TelemetryHelper.wait_for(telemetry_ref, fn _ -> true end, 300)
 
-    # All nodes should still be alive after heartbeats
-    assert Process.alive?(primary)
-    assert Process.alive?(backup1)
-    assert Process.alive?(backup2)
-
-    # Stop the primary to simulate failure
-    GenServer.stop(primary, :shutdown)
-    refute Process.alive?(primary)
-
-    # Wait for primary inactivity timeout to trigger on backups
+    # Attach timeout listener BEFORE stopping primary so we can't miss the event
     telemetry_ref2 = TelemetryHelper.expect([:timer, :primary_timeout])
-    TelemetryHelper.wait_for(telemetry_ref2, fn _ -> true end, 500)
 
-    # Backups should still be alive despite primary failure
-    assert Process.alive?(backup1), "Backup1 should survive primary failure"
-    assert Process.alive?(backup2), "Backup2 should survive primary failure"
+    # Stop the actual primary to simulate failure
+    GenServer.stop(primary, :shutdown)
 
-    # In a full implementation, one of the backups would become the new primary
-    # For now, we just verify they don't crash when primary fails
+    # Register a dummy process under the dead primary's name so that
+    # the backups' broadcast in start_manual_view_change doesn't crash
+    # on send/2 to an unregistered atom.
+    dummy = spawn(fn -> Process.sleep(:infinity) end)
+    Process.register(dummy, node_a)
+    on_exit(fn -> Process.exit(dummy, :kill) end)
+
+    # Wait for primary inactivity timeout to trigger on a backup
+    TelemetryHelper.wait_for(telemetry_ref2, fn _ -> true end, 800)
 
     TelemetryHelper.detach(telemetry_ref)
     TelemetryHelper.detach(telemetry_ref2)

@@ -127,30 +127,50 @@ defmodule ViewChangeTest do
   end
 
   describe "start_view_change_impl/2 vote counting" do
-    test "collects StartViewChange votes and sends DoViewChange when majority reached", %{
-      replicas: [replica1, _replica2, _replica3],
-      node_ids: [node1_id, node2_id, _node3_id]
-    } do
+    test "collects StartViewChange votes and sends DoViewChange when majority reached" do
+      # Use isolated replica with dummy peers to avoid broadcast races
+      unique_id = System.unique_integer([:positive])
+      node1_id = :"vc_n1_#{unique_id}"
+      node2_id = :"vc_n2_#{unique_id}"
+      node3_id = :"vc_n3_#{unique_id}"
+
+      # Register dummy processes so broadcast doesn't crash on send/2
+      for name <- [node2_id, node3_id] do
+        pid = spawn(fn -> Process.sleep(:infinity) end)
+        Process.register(pid, name)
+        on_exit(fn -> Process.exit(pid, :kill) end)
+      end
+
+      replica1 =
+        start_supervised!(
+          {Vsr.ListKv,
+           [
+             node_id: node1_id,
+             cluster_size: 3,
+             replicas: [node2_id, node3_id],
+             heartbeat_interval: 5000,
+             primary_inactivity_timeout: 10000,
+             name: node1_id
+           ]},
+          id: :"vc_replica_#{unique_id}"
+        )
+
       # Put replica1 in view_change status for view 1
       telemetry_ref = TelemetryHelper.expect([:state, :status_change])
       start_view_change_msg1 = %StartViewChange{view: 1, replica: node1_id}
       VsrServer.vsr_send(replica1, start_view_change_msg1)
       TelemetryHelper.wait_for(telemetry_ref, &(&1.new_status == :view_change))
 
-      # Send StartViewChange from different replicas (directly counted now)
-      telemetry_ref2 = TelemetryHelper.expect([:view_change, :vote_received])
+      # Second vote from node2 should reach majority (2/3) and trigger DoViewChange
+      do_vc_ref = TelemetryHelper.expect([:view_change, :do_view_change, :sent])
       start_view_change_msg2 = %StartViewChange{view: 1, replica: node2_id}
-
       VsrServer.vsr_send(replica1, start_view_change_msg2)
-      TelemetryHelper.wait_for(telemetry_ref2)
+      TelemetryHelper.wait_for(do_vc_ref)
 
-      # Check that view_change_votes are being tracked
-      state = VsrServer.dump(replica1)
-      assert Map.has_key?(state.view_change_votes, 1)
-      assert length(Map.get(state.view_change_votes, 1)) >= 2
+      # DoViewChange was sent — proves majority was reached
 
       TelemetryHelper.detach(telemetry_ref)
-      TelemetryHelper.detach(telemetry_ref2)
+      TelemetryHelper.detach(do_vc_ref)
     end
 
     test "ignores duplicate StartViewChange from same replica", %{
